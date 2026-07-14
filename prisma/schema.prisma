@@ -1,0 +1,381 @@
+// Productivity — local content automation cockpit
+// Prisma 7 rust-free ESM client. Import from "@/generated/prisma/client".
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "esm"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Auth (single local user)
+// ---------------------------------------------------------------------------
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String?
+  passwordHash String
+  createdAt    DateTime @default(now())
+}
+
+// ---------------------------------------------------------------------------
+// App settings (singleton row, id = "singleton")
+// ---------------------------------------------------------------------------
+
+enum ClaudeAuthMode {
+  SUBSCRIPTION
+  API_KEY
+}
+
+model AppSetting {
+  id             String         @id @default("singleton")
+  defaultModel   String         @default("sonnet")
+  claudeAuthMode ClaudeAuthMode @default(SUBSCRIPTION)
+  assetsRoot     String         @default("data/assets")
+  tasksRoot      String         @default("data/tasks")
+  updatedAt      DateTime       @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// Workflows
+// ---------------------------------------------------------------------------
+
+model Workflow {
+  id                String   @id @default(cuid())
+  name              String
+  slug              String   @unique
+  platform          String   @default("instagram")
+  description       String?
+  globalInstruction String   @default("")
+  defaultModel      String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  schedules      Schedule[]
+  assetFolders   AssetFolder[]
+  globalAssets   WorkflowAsset[]
+  tasks          Task[]
+  workflowFonts  WorkflowFont[]
+  workflowSkills WorkflowSkill[]
+}
+
+// ---------------------------------------------------------------------------
+// Schedules (cron)
+// ---------------------------------------------------------------------------
+
+enum Cadence {
+  DAILY
+  WEEKLY
+  MONTHLY
+}
+
+model Schedule {
+  id         String   @id @default(cuid())
+  workflowId String
+  workflow   Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  cadence   Cadence
+  cronExpr  String
+  timeOfDay String   @default("09:00")
+  timezone  String   @default("Asia/Jakarta")
+  enabled   Boolean  @default(true)
+  nextRunAt DateTime?
+  lastRunAt DateTime?
+  createdAt DateTime @default(now())
+
+  tasks Task[]
+  runs  TaskRun[]
+
+  @@index([workflowId])
+  @@index([enabled])
+}
+
+// ---------------------------------------------------------------------------
+// Assets
+// ---------------------------------------------------------------------------
+
+model AssetFolder {
+  id         String   @id @default(cuid())
+  workflowId String
+  workflow   Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  name      String
+  slug      String
+  relPath   String
+  notes     String?
+  createdAt DateTime @default(now())
+
+  assets Asset[]
+  tasks  Task[]
+
+  @@unique([workflowId, slug])
+  @@index([workflowId])
+}
+
+model Asset {
+  id       String @id @default(cuid())
+  folderId String
+  folder   AssetFolder @relation(fields: [folderId], references: [id], onDelete: Cascade)
+
+  filename    String
+  relPath     String
+  mimeType    String
+  size        Int
+  width       Int?
+  height      Int?
+  description String @default("")
+  // Retrieval keywords (auto-captioned or hand-entered) used by the asset
+  // ranker to pick relevant photos per run without loading every image.
+  tags          String[] @default([])
+  // True when description/tags were produced by the caption assistant rather
+  // than typed by the user.
+  autoDescribed Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  @@index([folderId])
+}
+
+// Global, workflow-level assets reused across every task in the workflow
+// (backgrounds, brand logos, SVG patterns).
+enum WorkflowAssetKind {
+  BACKGROUND
+  LOGO
+  PATTERN
+  OTHER
+}
+
+model WorkflowAsset {
+  id         String   @id @default(cuid())
+  workflowId String
+  workflow   Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  filename    String
+  relPath     String
+  mimeType    String
+  size        Int
+  width       Int?
+  height      Int?
+  kind        WorkflowAssetKind @default(OTHER)
+  description String            @default("")
+  createdAt   DateTime          @default(now())
+
+  @@index([workflowId])
+}
+
+// ---------------------------------------------------------------------------
+// Tasks + runs
+// ---------------------------------------------------------------------------
+
+model Task {
+  id         String   @id @default(cuid())
+  workflowId String
+  workflow   Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  name          String
+  instruction   String   @default("")
+  assetFolderId String?
+  assetFolder   AssetFolder? @relation(fields: [assetFolderId], references: [id], onDelete: SetNull)
+  model         String?
+  scheduleId    String?
+  schedule      Schedule? @relation(fields: [scheduleId], references: [id], onDelete: SetNull)
+  enabled       Boolean  @default(true)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  runs TaskRun[]
+
+  @@index([workflowId])
+  @@index([scheduleId])
+}
+
+enum RunStatus {
+  QUEUED
+  RUNNING
+  DONE
+  FAILED
+  CANCELLED
+}
+
+model TaskRun {
+  id     String @id @default(cuid())
+  taskId String
+  task   Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  status          RunStatus @default(QUEUED)
+  outputRelPath   String?
+  model           String?
+  claudeSessionId String?
+  tokensIn            Int       @default(0)
+  tokensOut           Int       @default(0)
+  cacheCreationTokens Int       @default(0)
+  cacheReadTokens     Int       @default(0)
+  numTurns            Int       @default(0)
+  durationMs          Int?
+  durationApiMs       Int?
+  costUsd             Float     @default(0)
+  modelUsage          Json?     // Record<model, ModelUsage> from the Agent SDK result
+  error           String?
+  trigger         String    @default("manual") // manual | schedule
+  scheduleId      String?
+  schedule        Schedule? @relation(fields: [scheduleId], references: [id], onDelete: SetNull)
+  createdAt       DateTime  @default(now())
+  startedAt       DateTime?
+  finishedAt      DateTime?
+
+  events    RunEvent[]
+  artifacts RunArtifact[]
+
+  @@index([taskId])
+  @@index([status])
+  @@index([scheduleId])
+}
+
+enum RunEventType {
+  TEXT
+  TOOL
+  ERROR
+  SYSTEM
+  ARTIFACT
+  STATUS
+}
+
+model RunEvent {
+  id        String   @id @default(cuid())
+  taskRunId String
+  taskRun   TaskRun  @relation(fields: [taskRunId], references: [id], onDelete: Cascade)
+
+  seq     Int
+  type    RunEventType
+  payload Json
+  ts      DateTime @default(now())
+
+  @@index([taskRunId, seq])
+}
+
+enum ArtifactKind {
+  PNG
+  HTML
+  OTHER
+}
+
+model RunArtifact {
+  id        String   @id @default(cuid())
+  taskRunId String
+  taskRun   TaskRun  @relation(fields: [taskRunId], references: [id], onDelete: Cascade)
+
+  kind      ArtifactKind
+  filename  String
+  relPath   String
+  width     Int?
+  height    Int?
+  createdAt DateTime @default(now())
+
+  @@index([taskRunId])
+}
+
+// ---------------------------------------------------------------------------
+// Skills (mirror of .claude/skills/<slug>/SKILL.md)
+// ---------------------------------------------------------------------------
+
+model Skill {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  name        String
+  description String   @default("")
+  content     String   @default("")
+  scope       String   @default("PROJECT")
+  enabled     Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  workflowSkills WorkflowSkill[]
+}
+
+model WorkflowSkill {
+  workflowId String
+  workflow   Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  skillId    String
+  skill      Skill    @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@id([workflowId, skillId])
+  @@index([skillId])
+}
+
+// ---------------------------------------------------------------------------
+// Fonts — global Font Bank, assignable per workflow, pickable by the AI
+// ---------------------------------------------------------------------------
+
+enum FontSource {
+  GOOGLE
+  URL
+  UPLOAD
+}
+
+enum FontCategory {
+  SANS
+  SERIF
+  DISPLAY
+  HANDWRITING
+  MONOSPACE
+  OTHER
+}
+
+model Font {
+  id          String       @id @default(cuid())
+  family      String
+  slug        String       @unique
+  source      FontSource
+  category    FontCategory @default(SANS)
+  moodTags    String       @default("")
+  previewText String       @default("The quick brown fox")
+  enabled     Boolean      @default(true)
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
+
+  variants       FontVariant[]
+  workflowFonts  WorkflowFont[]
+  headingPairings FontPairing[] @relation("HeadingFont")
+  bodyPairings    FontPairing[] @relation("BodyFont")
+}
+
+model FontVariant {
+  id     String @id @default(cuid())
+  fontId String
+  font   Font   @relation(fields: [fontId], references: [id], onDelete: Cascade)
+
+  weight      Int     @default(400)
+  weightRange String? // e.g. "100 900" for variable fonts
+  style       String  @default("normal") // normal | italic
+  format      String  @default("woff2") // woff2 | woff | ttf | otf
+  filename    String
+  relPath     String
+
+  @@index([fontId])
+}
+
+model WorkflowFont {
+  workflowId String
+  workflow   Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  fontId     String
+  font       Font     @relation(fields: [fontId], references: [id], onDelete: Cascade)
+  role       String   @default("any") // any | heading | body
+
+  @@id([workflowId, fontId])
+  @@index([fontId])
+}
+
+model FontPairing {
+  id            String   @id @default(cuid())
+  name          String
+  headingFontId String
+  headingFont   Font     @relation("HeadingFont", fields: [headingFontId], references: [id], onDelete: Cascade)
+  bodyFontId    String
+  bodyFont      Font     @relation("BodyFont", fields: [bodyFontId], references: [id], onDelete: Cascade)
+  moodTags      String   @default("")
+  createdAt     DateTime @default(now())
+}

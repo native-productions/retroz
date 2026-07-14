@@ -1,0 +1,41 @@
+{
+  "version": 1,
+  "skills": {
+    "content-calendar-sms": {
+      "source": "blacktwist/social-media-skills",
+      "sourceType": "github",
+      "skillPath": "skills/content-calendar-sms/SKILL.md",
+      "computedHash": "072497335e3d19b2ea238d4f61764663f7ec5b1039a4e13387c25cf26fc1d040"
+    },
+    "content-repurposer-sms": {
+      "source": "blacktwist/social-media-skills",
+      "sourceType": "github",
+      "skillPath": "skills/content-repurposer-sms/SKILL.md",
+      "computedHash": "1c03fd0244b7bbab1658f1f98d7ccfce2bc67fa2ad8155bac871e7cbad7cc1d5"
+    },
+    "content-strategy-sms": {
+      "source": "blacktwist/social-media-skills",
+      "sourceType": "github",
+      "skillPath": "skills/content-strategy-sms/SKILL.md",
+      "computedHash": "36f997fb0d595e7b5112e69019ce02c413df294b77f100f685615ff49ac1452b"
+    },
+    "copywriting": {
+      "source": "coreyhaines31/marketingskills",
+      "sourceType": "github",
+      "skillPath": "skills/copywriting/SKILL.md",
+      "computedHash": "c8d63b1f77be04fd54981720de65697988810bd28331097dbe0aaf3e166d638a"
+    },
+    "instagram-content-generation": {
+      "source": "eachlabs/skills",
+      "sourceType": "github",
+      "skillPath": "skills/instagram-content-generation/SKILL.md",
+      "computedHash": "fe5626be625fd865e61db2aa311b3cbca5c71967c2798fee3adc8120419a5358"
+    },
+    "social-media-manager": {
+      "source": "alirezarezvani/claude-skills",
+      "sourceType": "github",
+      "skillPath": "marketing-skill/skills/social-media-manager/SKILL.md",
+      "computedHash": "4e6fb3c727fe8c1ca6a4ab5e9e86a21ba857f13ab8da6b95b9bfcaf6c09803ff"
+    }
+  }
+}

@@ -39,3 +39,15 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# prisma generated client (rust-free prisma-client generator output)
+/src/generated
+
+# local data store — uploaded assets + task run outputs
+/data
+
+# keep the example env committed
+!.env.example
+
+# graphify — local knowledge graph (regenerable, leaks absolute paths)
+/graphify-out

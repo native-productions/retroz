@@ -1,26 +1,197 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ==========================================================================
+   Productivity — retro / creative / modern design system
+   Palette: green (primary) · purple (structure) · pink (accent)
+   ========================================================================== */
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  /* raw brand ramps */
+  --green-300: #6ff7a8;
+  --green-400: #35e07f;
+  --green-500: #14c866;
+  --green-600: #0ba152;
+
+  --purple-300: #c4b0ff;
+  --purple-400: #a385ff;
+  --purple-500: #7c53ff;
+  --purple-600: #6438e6;
+  --purple-900: #1a1030;
+
+  --pink-300: #ffb0d8;
+  --pink-400: #ff6fb3;
+  --pink-500: #ff2e93;
+  --pink-600: #e00a75;
+
+  /* light theme (cream) */
+  --bg: #f7f2e9;
+  --bg-grid: #ece3d3;
+  --surface: #fffdf8;
+  --surface-2: #f2ecdf;
+  --border: #1d1524;
+  --border-soft: #d8cdb8;
+  --fg: #1d1524;
+  --fg-muted: #6b6152;
+  --primary: var(--green-500);
+  --primary-fg: #06231a;
+  --secondary: var(--purple-500);
+  --secondary-fg: #ffffff;
+  --accent: var(--pink-500);
+  --accent-fg: #ffffff;
+  --ring: var(--purple-500);
+  --danger: #e5484d;
+  --shadow-color: #1d1524;
+}
+
+.dark {
+  /* dark theme (purple-tinted near-black) */
+  --bg: #0d0a14;
+  --bg-grid: #17111f;
+  --surface: #16101f;
+  --surface-2: #1e1630;
+  --border: #322445;
+  --border-soft: #251a35;
+  --fg: #f3ecff;
+  --fg-muted: #a394bd;
+  --primary: var(--green-400);
+  --primary-fg: #052113;
+  --secondary: var(--purple-400);
+  --secondary-fg: #120a24;
+  --accent: var(--pink-400);
+  --accent-fg: #250417;
+  --ring: var(--purple-400);
+  --danger: #ff6369;
+  --shadow-color: #000000;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
+  --color-bg: var(--bg);
+  --color-bg-grid: var(--bg-grid);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-border: var(--border);
+  --color-border-soft: var(--border-soft);
+  --color-fg: var(--fg);
+  --color-fg-muted: var(--fg-muted);
+  --color-primary: var(--primary);
+  --color-primary-fg: var(--primary-fg);
+  --color-secondary: var(--secondary);
+  --color-secondary-fg: var(--secondary-fg);
+  --color-accent: var(--accent);
+  --color-accent-fg: var(--accent-fg);
+  --color-ring: var(--ring);
+  --color-danger: var(--danger);
+
+  --color-green-300: var(--green-300);
+  --color-green-400: var(--green-400);
+  --color-green-500: var(--green-500);
+  --color-purple-300: var(--purple-300);
+  --color-purple-400: var(--purple-400);
+  --color-purple-500: var(--purple-500);
+  --color-pink-300: var(--pink-300);
+  --color-pink-400: var(--pink-400);
+  --color-pink-500: var(--pink-500);
+
   --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-display: var(--font-display);
+  --font-mono: var(--font-mono);
+
+  --radius-retro: 6px;
+
+  --shadow-hard: 4px 4px 0 0 var(--shadow-color);
+  --shadow-hard-sm: 2px 2px 0 0 var(--shadow-color);
+  --shadow-hard-lg: 6px 6px 0 0 var(--shadow-color);
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  color-scheme: light dark;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background-color: var(--bg);
+  color: var(--fg);
+  font-family: var(--font-sans), system-ui, sans-serif;
+  /* subtle retro grid */
+  background-image:
+    linear-gradient(var(--bg-grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--bg-grid) 1px, transparent 1px);
+  background-size: 28px 28px;
+  background-position: -1px -1px;
+}
+
+/* ---- retro utility classes ---- */
+
+.font-display {
+  font-family: var(--font-display), var(--font-sans), sans-serif;
+  letter-spacing: -0.01em;
+}
+
+.shadow-hard {
+  box-shadow: var(--shadow-hard);
+}
+.shadow-hard-sm {
+  box-shadow: var(--shadow-hard-sm);
+}
+.shadow-hard-lg {
+  box-shadow: var(--shadow-hard-lg);
+}
+
+/* chunky bordered card */
+.retro-card {
+  background-color: var(--surface);
+  border: 2px solid var(--border);
+  border-radius: var(--radius-retro);
+  box-shadow: var(--shadow-hard);
+}
+
+/* interactive press effect */
+.retro-press {
+  transition:
+    transform 120ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    box-shadow 120ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.retro-press:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: var(--shadow-hard-lg);
+}
+.retro-press:active {
+  transform: translate(2px, 2px);
+  box-shadow: var(--shadow-hard-sm);
+}
+
+/* CRT scanline overlay */
+.scanlines {
+  position: relative;
+}
+.scanlines::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(0, 0, 0, 0.06) 0px,
+    rgba(0, 0, 0, 0.06) 1px,
+    transparent 2px,
+    transparent 4px
+  );
+  mix-blend-mode: multiply;
+  border-radius: inherit;
+}
+
+::selection {
+  background: var(--accent);
+  color: var(--accent-fg);
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--secondary);
+  border: 2px solid var(--bg);
+  border-radius: 999px;
 }
