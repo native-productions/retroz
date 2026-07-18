@@ -46,6 +46,9 @@ model AppSetting {
   // Codex engine defaults (used when provider = CODEX).
   codexModel           String @default("gpt-5.4")
   codexReasoningEffort String @default("medium")
+  // Pexels stock-photo integration. Empty = feature disabled (the Pexels tab in
+  // the asset picker stays locked until a key is saved here).
+  pexelsApiKey   String         @default("")
   assetsRoot     String         @default("data/assets")
   tasksRoot      String         @default("data/tasks")
   updatedAt      DateTime       @updatedAt

@@ -28,7 +28,7 @@ export function TabsTrigger({
   return (
     <TabsPrimitive.Trigger
       className={cn(
-        "font-mono text-xs font-semibold uppercase tracking-wide px-3 py-1.5 rounded-[4px] text-fg-muted transition-colors data-[state=active]:bg-secondary data-[state=active]:text-secondary-fg data-[state=active]:shadow-hard-sm outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        "font-mono text-xs font-semibold uppercase tracking-wide px-3 py-1.5 rounded-[4px] text-fg-muted transition-colors data-[state=active]:bg-secondary data-[state=active]:text-secondary-fg data-[state=active]:shadow-hard-sm outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-40",
         className,
       )}
       {...props}

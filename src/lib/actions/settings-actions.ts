@@ -21,6 +21,7 @@ export async function updateSettings(input: unknown) {
       claudeAuthMode: data.claudeAuthMode,
       codexModel: data.codexModel,
       codexReasoningEffort: data.codexReasoningEffort,
+      pexelsApiKey: data.pexelsApiKey,
     },
   });
   revalidatePath("/settings");

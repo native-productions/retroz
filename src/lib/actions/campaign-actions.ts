@@ -97,6 +97,10 @@ export async function runPlanner(
   enqueuePlannerRun(planRun.id);
   revalidatePath(`/campaigns/${campaignId}`);
   revalidatePath(`/workflows/${campaign.workflowId}`);
+
+  // A fresh full plan keeps the user on the Brief tab, which splits to show the
+  // live planner runner alongside the brief.
+  if (scope === "full") redirect(`/campaigns/${campaignId}?tab=brief`);
 }
 
 export async function rerollCampaignItem(itemId: string) {

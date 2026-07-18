@@ -19,6 +19,7 @@ import {
   deleteCampaign,
 } from "@/lib/actions/campaign-actions";
 import { toYmd, formatInTz } from "@/lib/campaign-time";
+import { isPexelsConfigured } from "@/lib/pexels";
 
 export const dynamic = "force-dynamic";
 
@@ -39,7 +40,26 @@ export default async function CampaignDetailPage({
       workflow: true,
       items: {
         orderBy: [{ dayIndex: "asc" }, { slotIndex: "asc" }],
-        include: { assets: { select: { assetId: true } } },
+        include: {
+          assets: { select: { assetId: true } },
+          task: {
+            include: {
+              runs: {
+                orderBy: { createdAt: "desc" },
+                select: {
+                  id: true,
+                  status: true,
+                  createdAt: true,
+                  artifacts: {
+                    where: { kind: "PNG" },
+                    take: 1,
+                    select: { relPath: true },
+                  },
+                },
+              },
+            },
+          },
+        },
       },
       assetRequests: { orderBy: { label: "asc" } },
       planRuns: {
@@ -51,11 +71,13 @@ export default async function CampaignDetailPage({
   });
   if (!campaign) notFound();
 
+  const pexelsEnabled = await isPexelsConfigured();
+
   const folderAssets = campaign.assetFolderId
     ? await db.asset.findMany({
         where: { folderId: campaign.assetFolderId },
         orderBy: { createdAt: "asc" },
-        select: { id: true, filename: true, relPath: true },
+        select: { id: true, filename: true, relPath: true, description: true },
       })
     : [];
 
@@ -66,6 +88,14 @@ export default async function CampaignDetailPage({
     campaign.status,
   );
   const canPlan = campaign.status === "DRAFT" || campaign.status === "PLANNING";
+  // The planner has been kicked off at least once — gates the planner/calendar/
+  // photos/schedule tabs (nothing to show there before the first run).
+  const plannerStarted = Boolean(latestPlan);
+  // The planner is mid-flight (AI generating tasks & briefs) — block re-running.
+  const planning =
+    campaign.status === "PLANNING" ||
+    latestPlan?.status === "QUEUED" ||
+    latestPlan?.status === "RUNNING";
 
   const requiredDays = campaign.items.reduce((m, i) => Math.max(m, i.dayIndex), 1);
   const requiredSlots = campaign.items.reduce(
@@ -83,8 +113,19 @@ export default async function CampaignDetailPage({
     caption: i.caption,
     status: i.status,
     scheduledAt: i.scheduledAt,
+    // Concrete date/time once the campaign is scheduled; null while still a draft.
+    scheduledLabel: i.scheduledAt
+      ? formatInTz(i.scheduledAt, campaign.timezone)
+      : null,
     taskRunId: i.taskRunId,
     assetIds: i.assets.map((a) => a.assetId),
+    // Render runs for this item's task (newest first) with a PNG thumbnail.
+    runs: (i.task?.runs ?? []).map((r) => ({
+      id: r.id,
+      status: r.status,
+      label: formatInTz(r.createdAt, campaign.timezone),
+      thumb: r.artifacts[0]?.relPath ?? null,
+    })),
   }));
 
   // Land the user on the tab that matches where the campaign is in its lifecycle.
@@ -96,8 +137,9 @@ export default async function CampaignDetailPage({
         ? "schedule"
         : "brief";
 
-  // --- tab: brief (+ run planner + danger zone) ---
-  const briefNode = (
+  // --- tab: brief (brief + run planner; splits to brief | planner runner once
+  //     a plan exists, so the Planner tab is no longer needed) ---
+  const briefColumn = (
     <div className="flex flex-col gap-5">
       <Card className="p-4">
         {campaign.brief ? (
@@ -120,11 +162,40 @@ export default async function CampaignDetailPage({
             action={runPlanner.bind(null, campaign.id, "full", undefined)}
             variant="primary"
             size="sm"
+            disabled={planning}
           >
-            <Sparkles className="size-4" /> Run planner
+            <Sparkles className="size-4" />{" "}
+            {planning ? "Planning…" : "Run planner"}
           </ActionButton>
         </div>
       ) : null}
+    </div>
+  );
+
+  const plannerColumn = latestPlan ? (
+    <CampaignPlannerViewer
+      planRunId={latestPlan.id}
+      initialStatus={latestPlan.status}
+      initialEvents={latestPlan.events.map((e) => ({
+        seq: e.seq,
+        type: e.type as "TEXT" | "TOOL" | "ERROR" | "SYSTEM" | "STATUS",
+        payload: e.payload as Record<string, unknown>,
+        ts: e.ts.toISOString(),
+      }))}
+    />
+  ) : null;
+
+  const briefNode = (
+    <div className="flex flex-col gap-5">
+      {plannerColumn ? (
+        // Two views: brief on the left, live planner runner on the right.
+        <div className="grid items-start gap-5 lg:grid-cols-2">
+          {briefColumn}
+          {plannerColumn}
+        </div>
+      ) : (
+        briefColumn
+      )}
 
       {/* Danger zone */}
       <div className="mt-2 flex items-center justify-between gap-3 rounded-[var(--radius-retro)] border-2 border-danger/40 bg-danger/5 p-4">
@@ -168,22 +239,6 @@ export default async function CampaignDetailPage({
     </div>
   );
 
-  // --- tab: planner ---
-  const plannerNode = latestPlan ? (
-    <CampaignPlannerViewer
-      planRunId={latestPlan.id}
-      initialStatus={latestPlan.status}
-      initialEvents={latestPlan.events.map((e) => ({
-        seq: e.seq,
-        type: e.type as "TEXT" | "TOOL" | "ERROR" | "SYSTEM" | "STATUS",
-        payload: e.payload as Record<string, unknown>,
-        ts: e.ts.toISOString(),
-      }))}
-    />
-  ) : (
-    <TabEmpty>No planner run yet. Start it from the Brief tab.</TabEmpty>
-  );
-
   // --- tab: calendar ---
   const calendarNode =
     campaign.items.length > 0 ? (
@@ -191,7 +246,6 @@ export default async function CampaignDetailPage({
         campaignId={campaign.id}
         editable={editable}
         items={items}
-        assets={folderAssets}
       />
     ) : (
       <TabEmpty>No calendar yet. Run the planner to draft one.</TabEmpty>
@@ -209,6 +263,13 @@ export default async function CampaignDetailPage({
           count: r.count,
           fulfilled: r.fulfilled,
         }))}
+        assets={folderAssets.map((a) => ({
+          id: a.id,
+          filename: a.filename,
+          relPath: a.relPath,
+          description: a.description,
+        }))}
+        pexelsEnabled={pexelsEnabled}
       />
     ) : (
       <TabEmpty>No photo requests. The planner lists needed photos here.</TabEmpty>
@@ -293,12 +354,12 @@ export default async function CampaignDetailPage({
       <PageBody className="flex flex-col gap-5">
         <CampaignTabs
           defaultTab={defaultTab}
+          plannerStarted={plannerStarted}
           counts={{
             calendar: campaign.items.length,
             photos: campaign.assetRequests.length,
           }}
           brief={briefNode}
-          planner={plannerNode}
           calendar={calendarNode}
           photos={photosNode}
           schedule={scheduleNode}

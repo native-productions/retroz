@@ -47,6 +47,12 @@ export default function RootLayout({
       className={`${geistSans.variable} ${spaceGrotesk.variable} ${jetbrainsMono.variable} h-full antialiased`}
       suppressHydrationWarning
     >
+      <head>
+        {/* Blocking theme init from a static file — applies .dark before paint
+            (no flash). A src-based script is a valid resource in React 19, so it
+            avoids the inline-<script> render warning. */}
+        <script src="/theme-init.js" />
+      </head>
       <body className="min-h-full flex flex-col">
         <ThemeProvider>
           <ConfirmProvider>{children}</ConfirmProvider>

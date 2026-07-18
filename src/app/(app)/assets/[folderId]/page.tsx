@@ -4,8 +4,9 @@ import { db } from "@/lib/db-client";
 import { PageHeader, PageBody } from "@/components/page-header";
 import { Badge } from "@/components/ui/ui-badge";
 import { ActionButton } from "@/components/ui/ui-action-button";
-import { AssetUploader } from "@/components/asset/asset-uploader";
+import { AssetSourceDialog } from "@/components/asset/asset-source-dialog";
 import { AssetCard } from "@/components/asset/asset-card";
+import { isPexelsConfigured } from "@/lib/pexels";
 import { BulkCaptionDialog } from "@/components/asset/bulk-caption-dialog";
 import { FolderRenameDialog } from "@/components/asset/folder-rename-dialog";
 import { deleteFolder } from "@/lib/actions/asset-actions";
@@ -27,6 +28,8 @@ export default async function AssetFolderPage({
   });
   if (!folder) notFound();
 
+  const pexelsEnabled = await isPexelsConfigured();
+
   return (
     <>
       <PageHeader
@@ -47,11 +50,14 @@ export default async function AssetFolderPage({
           notes={folder.notes ?? undefined}
         />
         <Badge tone="surface">{folder.assets.length} assets</Badge>
+        <AssetSourceDialog
+          scope={{ folderId: folder.id }}
+          pexelsEnabled={pexelsEnabled}
+          triggerLabel="Add photos"
+        />
       </PageHeader>
 
       <PageBody className="flex flex-col gap-5">
-        <AssetUploader folderId={folder.id} />
-
         {folder.assets.length > 0 ? (
           <div className="flex items-center justify-between gap-3">
             <p className="text-xs text-fg-muted">
@@ -86,6 +92,20 @@ export default async function AssetFolderPage({
                 }}
               />
             ))}
+          </div>
+        ) : null}
+
+        {folder.assets.length === 0 ? (
+          <div className="flex flex-col items-center gap-3 rounded-[var(--radius-retro)] border-2 border-dashed border-border-soft bg-surface-2/40 p-10 text-center">
+            <p className="text-sm font-medium">No photos yet</p>
+            <p className="font-mono text-xs text-fg-muted">
+              Add photos from your device or Pexels.
+            </p>
+            <AssetSourceDialog
+              scope={{ folderId: folder.id }}
+              pexelsEnabled={pexelsEnabled}
+              triggerLabel="Add photos"
+            />
           </div>
         ) : null}
 

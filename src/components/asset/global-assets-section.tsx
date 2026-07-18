@@ -1,17 +1,21 @@
 import { Globe } from "lucide-react";
 import { db } from "@/lib/db-client";
-import { GlobalAssetUploader } from "@/components/asset/global-asset-uploader";
+import { AssetSourceDialog } from "@/components/asset/asset-source-dialog";
 import { GlobalAssetCard } from "@/components/asset/global-asset-card";
+import { isPexelsConfigured } from "@/lib/pexels";
 
 export async function GlobalAssetsSection({
   workflowId,
 }: {
   workflowId: string;
 }) {
-  const assets = await db.workflowAsset.findMany({
-    where: { workflowId },
-    orderBy: { createdAt: "desc" },
-  });
+  const [assets, pexelsEnabled] = await Promise.all([
+    db.workflowAsset.findMany({
+      where: { workflowId },
+      orderBy: { createdAt: "desc" },
+    }),
+    isPexelsConfigured(),
+  ]);
 
   return (
     <section className="flex flex-col gap-3 rounded-[var(--radius-retro)] border-2 border-dashed border-border-soft bg-surface-2/30 p-4">
@@ -30,12 +34,20 @@ export async function GlobalAssetsSection({
             </p>
           </div>
         </div>
-        <span className="shrink-0 font-mono text-xs text-fg-muted">
-          {assets.length} asset{assets.length === 1 ? "" : "s"}
-        </span>
+        <div className="flex shrink-0 items-center gap-2">
+          <span className="font-mono text-xs text-fg-muted">
+            {assets.length} asset{assets.length === 1 ? "" : "s"}
+          </span>
+          <AssetSourceDialog
+            scope={{ workflowId }}
+            pexelsEnabled={pexelsEnabled}
+            accept="image/png,image/jpeg,image/webp,image/svg+xml"
+            allowSvg
+            triggerLabel="Add asset"
+            triggerVariant="outline"
+          />
+        </div>
       </div>
-
-      <GlobalAssetUploader workflowId={workflowId} />
 
       {assets.length > 0 ? (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">

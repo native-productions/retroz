@@ -26,6 +26,7 @@ export default async function SettingsPage() {
             claudeAuthMode: settings.claudeAuthMode,
             codexModel: settings.codexModel,
             codexReasoningEffort: settings.codexReasoningEffort,
+            pexelsApiKey: settings.pexelsApiKey,
           }}
           apiKeyPresent={apiKeyPresent}
           codexAuthPresent={codexAuthPresent}

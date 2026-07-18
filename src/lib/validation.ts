@@ -127,6 +127,7 @@ export const settingsUpdateSchema = z.object({
   claudeAuthMode: z.enum(["SUBSCRIPTION", "API_KEY"]),
   codexModel: z.string().min(1),
   codexReasoningEffort: z.enum(["low", "medium", "high", "xhigh"]),
+  pexelsApiKey: z.string().trim().max(200).default(""),
 });
 
 const fontCategoryEnum = z.enum([

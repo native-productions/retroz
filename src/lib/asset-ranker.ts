@@ -32,6 +32,18 @@ function tokenize(text: string): string[] {
     .filter((t) => t.length > 2 && !STOP_WORDS.has(t));
 }
 
+/** Distinct retrieval keywords from free text (e.g. a Pexels alt string), in
+ *  first-seen order and capped. Shares the ranker's tokenizer + stop-word list
+ *  so auto-filled tags match what the ranker later searches on. */
+export function deriveKeywords(text: string, max = 8): string[] {
+  const seen = new Set<string>();
+  for (const t of tokenize(text)) {
+    if (!seen.has(t)) seen.add(t);
+    if (seen.size >= max) break;
+  }
+  return [...seen];
+}
+
 interface Scored<T> {
   asset: T;
   score: number;

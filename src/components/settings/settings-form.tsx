@@ -3,6 +3,7 @@
 import * as React from "react";
 import { Save, Check, LoaderCircle } from "lucide-react";
 import { Button } from "@/components/ui/ui-button";
+import { Input } from "@/components/ui/ui-input";
 import { Field } from "@/components/ui/ui-label";
 import {
   Card,
@@ -42,6 +43,7 @@ export function SettingsForm({
     claudeAuthMode: "SUBSCRIPTION" | "API_KEY";
     codexModel: string;
     codexReasoningEffort: string;
+    pexelsApiKey: string;
   };
   apiKeyPresent: boolean;
   codexAuthPresent: boolean;
@@ -52,6 +54,7 @@ export function SettingsForm({
   const [codexEffort, setCodexEffort] = React.useState(
     initial.codexReasoningEffort,
   );
+  const [pexelsApiKey, setPexelsApiKey] = React.useState(initial.pexelsApiKey);
   const [state, setState] = React.useState<"idle" | "saving" | "saved">("idle");
 
   async function save() {
@@ -61,6 +64,7 @@ export function SettingsForm({
       claudeAuthMode: authMode,
       codexModel,
       codexReasoningEffort: codexEffort,
+      pexelsApiKey: pexelsApiKey.trim(),
     });
     setState("saved");
     setTimeout(() => setState("idle"), 1500);
@@ -174,6 +178,36 @@ export function SettingsForm({
                 ))}
               </SelectContent>
             </Select>
+          </Field>
+        </CardContent>
+      </Card>
+
+      {/* Pexels */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Pexels</CardTitle>
+          <CardDescription>
+            Stock photos for the asset picker. Get a free key at
+            pexels.com/api.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Field
+            label="API key"
+            hint={
+              pexelsApiKey.trim()
+                ? "Pexels search is enabled across every asset picker."
+                : "Empty — the Pexels tab stays locked until a key is saved."
+            }
+          >
+            <Input
+              type="password"
+              value={pexelsApiKey}
+              onChange={(e) => setPexelsApiKey(e.target.value)}
+              placeholder="Paste your Pexels API key"
+              autoComplete="off"
+              className="max-w-lg font-mono"
+            />
           </Field>
         </CardContent>
       </Card>
