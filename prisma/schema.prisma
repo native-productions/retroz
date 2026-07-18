@@ -72,6 +72,7 @@ model Workflow {
   tasks          Task[]
   workflowFonts  WorkflowFont[]
   workflowSkills WorkflowSkill[]
+  campaigns      Campaign[]
 }
 
 // ---------------------------------------------------------------------------
@@ -120,8 +121,9 @@ model AssetFolder {
   notes     String?
   createdAt DateTime @default(now())
 
-  assets Asset[]
-  tasks  Task[]
+  assets    Asset[]
+  tasks     Task[]
+  campaigns Campaign[]
 
   @@unique([workflowId, slug])
   @@index([workflowId])
@@ -146,6 +148,8 @@ model Asset {
   // than typed by the user.
   autoDescribed Boolean  @default(false)
   createdAt   DateTime @default(now())
+
+  campaignItemAssets CampaignItemAsset[]
 
   @@index([folderId])
 }
@@ -197,7 +201,8 @@ model Task {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  runs TaskRun[]
+  runs         TaskRun[]
+  campaignItem CampaignItem?
 
   @@index([workflowId])
   @@index([scheduleId])
@@ -256,10 +261,16 @@ enum RunEventType {
   STATUS
 }
 
+// Polymorphic: an event belongs to EITHER a render TaskRun or a planner
+// CampaignPlanRun. Exactly-one-of is enforced in code (the executor that
+// creates the event always sets the matching id), not by a DB constraint.
 model RunEvent {
   id        String   @id @default(cuid())
-  taskRunId String
-  taskRun   TaskRun  @relation(fields: [taskRunId], references: [id], onDelete: Cascade)
+  taskRunId String?
+  taskRun   TaskRun? @relation(fields: [taskRunId], references: [id], onDelete: Cascade)
+
+  campaignPlanRunId String?
+  campaignPlanRun   CampaignPlanRun? @relation(fields: [campaignPlanRunId], references: [id], onDelete: Cascade)
 
   seq     Int
   type    RunEventType
@@ -267,6 +278,7 @@ model RunEvent {
   ts      DateTime @default(now())
 
   @@index([taskRunId, seq])
+  @@index([campaignPlanRunId, seq])
 }
 
 enum ArtifactKind {
@@ -288,6 +300,157 @@ model RunArtifact {
   createdAt DateTime @default(now())
 
   @@index([taskRunId])
+}
+
+// ---------------------------------------------------------------------------
+// Campaign Planning — AI plans a multi-day content calendar (phase 1: planner
+// run), the user uploads the requested photos, then each planned item renders
+// as a normal Task/TaskRun on a bounded schedule.
+// ---------------------------------------------------------------------------
+
+enum CampaignStatus {
+  DRAFT           // brief captured, planner not run yet
+  PLANNING        // planner run queued/running
+  REVIEW          // planner produced a draft calendar; user editing
+  AWAITING_ASSETS // approved but the asset checklist is unfulfilled
+  SCHEDULED       // items materialized with concrete scheduledAt
+  RUNNING         // at least one item has fired
+  COMPLETED
+  CANCELLED
+}
+
+enum CampaignItemStatus {
+  DRAFT
+  SCHEDULED
+  RUNNING
+  DONE
+  FAILED
+  CANCELLED
+  SKIPPED
+}
+
+model Campaign {
+  id         String   @id @default(cuid())
+  workflowId String
+  workflow   Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  name         String
+  brief        String         @default("")
+  briefRelPath String?        // set when the brief came from an uploaded/saved file
+  status       CampaignStatus @default(DRAFT)
+  timezone     String         @default("Asia/Jakarta")
+
+  // Schedule params, captured at approve time.
+  startDate    DateTime?
+  durationDays Int?     // <= 7, enforced in validation + action
+  slotsPerDay  Int?
+  slotTimes    String[] @default([]) // HH:mm per slot index
+
+  // The one campaign-level asset folder (reuses AssetFolder / Asset).
+  assetFolderId String?
+  assetFolder   AssetFolder? @relation(fields: [assetFolderId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  items         CampaignItem[]
+  planRuns      CampaignPlanRun[]
+  assetRequests CampaignAssetRequest[]
+
+  @@index([workflowId])
+  @@index([status])
+}
+
+model CampaignItem {
+  id         String   @id @default(cuid())
+  campaignId String
+  campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  dayIndex    Int     // 1..durationDays
+  slotIndex   Int     // 0-based within a day
+  title       String
+  angle       String?
+  instruction String  @default("")
+  caption     String?
+
+  status      CampaignItemStatus @default(DRAFT)
+  scheduledAt DateTime?
+
+  // Becomes a real Task on approve; @unique gives Task a one-to-one back-relation.
+  taskId    String? @unique
+  task      Task?   @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  taskRunId String? // the TaskRun the ticker created when this item fired
+
+  // The planner's described per-slot photo needs (references request slugs).
+  assetPlan Json?
+  assets    CampaignItemAsset[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([campaignId])
+  @@index([status])
+  @@index([scheduledAt])
+}
+
+// Campaign-level "what photos are needed" checklist emitted by the planner.
+model CampaignAssetRequest {
+  id         String   @id @default(cuid())
+  campaignId String
+  campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  slug        String   // stable ref items point at, e.g. "hero-portrait"
+  label       String
+  description String   @default("")
+  count       Int      @default(1)
+  fulfilled   Boolean  @default(false)
+
+  @@index([campaignId])
+}
+
+// Per-item resolved manifest: which uploaded Assets this item uses.
+model CampaignItemAsset {
+  campaignItemId String
+  campaignItem   CampaignItem @relation(fields: [campaignItemId], references: [id], onDelete: Cascade)
+  assetId        String
+  asset          Asset        @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  @@id([campaignItemId, assetId])
+  @@index([assetId])
+}
+
+// Phase-1 planner run — lean sibling of TaskRun (no render/artifact fields).
+model CampaignPlanRun {
+  id         String   @id @default(cuid())
+  campaignId String
+  campaign   Campaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+
+  status RunStatus @default(QUEUED) // reuses the render run status enum
+  scope  String    @default("full") // full | reroll | add
+  itemId String?                    // target item for reroll/add scopes
+
+  provider            AgentProvider @default(CLAUDE)
+  model               String?
+  sessionId           String?
+  tokensIn            Int           @default(0)
+  tokensOut           Int           @default(0)
+  cacheCreationTokens Int           @default(0)
+  cacheReadTokens     Int           @default(0)
+  numTurns            Int           @default(0)
+  durationMs          Int?
+  durationApiMs       Int?
+  costUsd             Float         @default(0)
+  modelUsage          Json?
+  error               String?
+
+  createdAt  DateTime  @default(now())
+  startedAt  DateTime?
+  finishedAt DateTime?
+
+  events RunEvent[]
+
+  @@index([campaignId])
+  @@index([status])
 }
 
 // ---------------------------------------------------------------------------

@@ -1,5 +1,5 @@
 import type { RunEventType } from "@/generated/prisma/enums";
-import type { RunToolContext } from "@/lib/run-tools";
+import type { ToolDef } from "@/lib/run-tools";
 
 // Contract between the run executor and the engine backends. Backends stream
 // TEXT/TOOL events through `record` while running and return one uniform
@@ -12,7 +12,12 @@ export interface AgentRunInput {
   model: string;
   cwd: string;
   additionalDirectories: string[];
-  toolContext: RunToolContext;
+  /** The MCP tool set exposed to this run (render tools or planner tools). */
+  tools: ToolDef<unknown>[];
+  /** The run's tool context, handed verbatim to each tool's execute. */
+  toolContext: unknown;
+  /** Built-in tools to allow (Read/Write/Glob/Grep/Bash). */
+  baseTools?: string[];
   record: RecordEvent;
   /** Persist the engine session id (Claude session / Codex thread) once known. */
   onSessionId: (sessionId: string) => Promise<void>;

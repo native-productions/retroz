@@ -59,6 +59,9 @@ export async function POST(req: Request) {
   const form = await req.formData();
   const folderId = String(form.get("folderId") ?? "");
   const workflowId = String(form.get("workflowId") ?? "");
+  // Optional: seed every created asset's description (used by campaign uploads
+  // to carry the planner's requested-photo label + description).
+  const description = String(form.get("description") ?? "");
   const files = form.getAll("files").filter((f): f is File => f instanceof File);
 
   if (files.length === 0) {
@@ -122,6 +125,7 @@ export async function POST(req: Request) {
         size: w.buf.byteLength,
         width: w.width,
         height: w.height,
+        description,
       },
     });
     count++;

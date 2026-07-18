@@ -72,6 +72,46 @@ export const scheduleCreateSchema = z.object({
   taskId: z.string().nullable().optional(),
 });
 
+// ---------------------------------------------------------------------------
+// Campaign Planning
+// ---------------------------------------------------------------------------
+
+export const campaignCreateSchema = z.object({
+  workflowId: z.string().min(1),
+  name: z.string().min(1, "Name is required").max(120),
+  brief: z.string().max(20000).optional(),
+});
+
+export const campaignItemUpdateSchema = z.object({
+  id: z.string().min(1),
+  title: z.string().min(1).max(160).optional(),
+  angle: z.string().max(300).nullable().optional(),
+  instruction: z.string().max(8000).optional(),
+  caption: z.string().max(2200).nullable().optional(),
+});
+
+export const campaignItemAddSchema = z.object({
+  campaignId: z.string().min(1),
+  dayIndex: z.coerce.number().int().min(1).max(7),
+  slotIndex: z.coerce.number().int().min(0).max(5),
+  title: z.string().min(1).max(160),
+  instruction: z.string().max(8000).optional(),
+});
+
+export const campaignAssignAssetsSchema = z.object({
+  itemId: z.string().min(1),
+  assetIds: z.array(z.string().min(1)).max(20),
+});
+
+export const campaignApproveSchema = z.object({
+  campaignId: z.string().min(1),
+  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD"),
+  durationDays: z.coerce.number().int().min(1).max(7),
+  slotsPerDay: z.coerce.number().int().min(1).max(6),
+  slotTimes: z.array(z.string().regex(/^\d{2}:\d{2}$/, "Use HH:mm")).min(1).max(6),
+  timezone: z.string().default("Asia/Jakarta"),
+});
+
 export const skillUpsertSchema = z.object({
   id: z.string().optional(),
   name: z.string().min(1).max(80),

@@ -30,7 +30,15 @@ export async function updateTask(input: unknown) {
 }
 
 export async function deleteTask(id: string) {
+  // Keep campaigns in sync: if this task backs a campaign item, remove that item
+  // too (otherwise it lingers on the campaign page with no task to run).
+  const item = await db.campaignItem.findUnique({
+    where: { taskId: id },
+    select: { id: true, campaignId: true },
+  });
+  if (item) await db.campaignItem.delete({ where: { id: item.id } });
   const task = await db.task.delete({ where: { id } });
+  if (item) revalidatePath(`/campaigns/${item.campaignId}`);
   revalidatePath(`/workflows/${task.workflowId}`);
   redirect(`/workflows/${task.workflowId}`);
 }

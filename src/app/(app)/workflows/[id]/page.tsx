@@ -8,6 +8,7 @@ import { AssetsTab } from "@/components/asset/assets-tab";
 import { WorkflowFontsTab } from "@/components/font/workflow-fonts-tab";
 import { WorkflowSkillsTab } from "@/components/skill/workflow-skills-tab";
 import { TasksTab } from "@/components/task/tasks-tab";
+import { CampaignsTab } from "@/components/campaign/campaigns-tab";
 import { ScheduleTab } from "@/components/schedule/schedule-tab";
 
 export const dynamic = "force-dynamic";
@@ -28,6 +29,7 @@ export default async function WorkflowDetailPage({
           schedules: true,
           workflowFonts: true,
           workflowSkills: true,
+          campaigns: true,
         },
       },
     },
@@ -55,6 +57,7 @@ export default async function WorkflowDetailPage({
             schedules: workflow._count.schedules,
             fonts: workflow._count.workflowFonts,
             skills: workflow._count.workflowSkills,
+            campaigns: workflow._count.campaigns,
           }}
           instruction={
             <WorkflowInstructionEditor
@@ -68,6 +71,7 @@ export default async function WorkflowDetailPage({
           fonts={<WorkflowFontsTab workflowId={workflow.id} />}
           skills={<WorkflowSkillsTab workflowId={workflow.id} />}
           tasks={<TasksTab workflowId={workflow.id} />}
+          plan={<CampaignsTab workflowId={workflow.id} />}
           schedule={<ScheduleTab workflowId={workflow.id} />}
         />
       </PageBody>

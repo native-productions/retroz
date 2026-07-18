@@ -1,5 +1,6 @@
 import PQueue from "p-queue";
 import { executeRun } from "@/lib/run-executor";
+import { executePlannerRun } from "@/lib/planner-executor";
 
 // Serial queue — never run two agent spawns at once. Survives HMR via global.
 const globalForQueue = globalThis as unknown as { runQueue?: PQueue };
@@ -14,6 +15,11 @@ function queue(): PQueue {
 /** Enqueue a QUEUED TaskRun for execution. Non-blocking. */
 export function enqueueRun(taskRunId: string): void {
   void queue().add(() => executeRun(taskRunId));
+}
+
+/** Enqueue a phase-1 campaign planner run on the same serial queue. Non-blocking. */
+export function enqueuePlannerRun(planRunId: string): void {
+  void queue().add(() => executePlannerRun(planRunId));
 }
 
 /**

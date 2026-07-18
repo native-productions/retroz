@@ -8,10 +8,12 @@ import { buildRunPrompt } from "@/lib/prompt-builder";
 import { rankAssets } from "@/lib/asset-ranker";
 import { emitRunEvent, type RunBusEvent } from "@/lib/run-bus";
 import {
+  RUN_TOOLS,
   registerRunToolContext,
   releaseRunToolContext,
   type RunToolContext,
 } from "@/lib/run-tools";
+import type { ToolDef } from "@/lib/run-tools";
 import { runClaudeAgent } from "@/lib/claude-backend";
 import { runCodexAgent } from "@/lib/codex-backend";
 import type { RunEventType } from "@/generated/prisma/enums";
@@ -227,6 +229,7 @@ export async function executeRun(taskRunId: string): Promise<void> {
     model,
     cwd: outDirAbs,
     additionalDirectories,
+    tools: RUN_TOOLS as unknown as ToolDef<unknown>[],
     toolContext,
     record,
     onSessionId,

@@ -35,15 +35,38 @@ export interface RunToolResult {
   isError?: boolean;
 }
 
-export interface RunToolDef {
+/**
+ * A run tool, generic over the context it needs. Render tools use
+ * RunToolContext; the planner uses PlannerToolContext. The backends never
+ * introspect the context — they just hand it to execute — so one primitive
+ * serves every tool set.
+ */
+export interface ToolDef<Ctx> {
   name: string;
   description: string;
   shape: z.ZodRawShape;
-  execute: (ctx: RunToolContext, args: unknown) => Promise<RunToolResult>;
+  execute: (ctx: Ctx, args: unknown) => Promise<RunToolResult>;
 }
 
-function text(value: string, isError?: boolean): RunToolResult {
+/** Back-compat alias — the render tool set. */
+export type RunToolDef = ToolDef<RunToolContext>;
+
+export function text(value: string, isError?: boolean): RunToolResult {
   return { content: [{ type: "text", text: value }], ...(isError ? { isError } : {}) };
+}
+
+export function defineTool<Ctx, Shape extends z.ZodRawShape>(
+  name: string,
+  description: string,
+  shape: Shape,
+  execute: (ctx: Ctx, args: z.output<z.ZodObject<Shape>>) => Promise<RunToolResult>,
+): ToolDef<Ctx> {
+  return {
+    name,
+    description,
+    shape,
+    execute: execute as ToolDef<Ctx>["execute"],
+  };
 }
 
 function defineRunTool<Shape extends z.ZodRawShape>(
@@ -55,12 +78,7 @@ function defineRunTool<Shape extends z.ZodRawShape>(
     args: z.output<z.ZodObject<Shape>>,
   ) => Promise<RunToolResult>,
 ): RunToolDef {
-  return {
-    name,
-    description,
-    shape,
-    execute: execute as RunToolDef["execute"],
-  };
+  return defineTool<RunToolContext, Shape>(name, description, shape, execute);
 }
 
 export const RUN_TOOLS: RunToolDef[] = [
@@ -154,6 +172,14 @@ export function summarizeToolInput(name: string, input: unknown): unknown {
       htmlBytes: typeof i.html === "string" ? i.html.length : 0,
     };
   }
+  if (name.endsWith("submit_campaign_plan") && input && typeof input === "object") {
+    const items = (input as Record<string, unknown>).items;
+    return { items: Array.isArray(items) ? items.length : 0 };
+  }
+  if (name.endsWith("submit_asset_manifest") && input && typeof input === "object") {
+    const requests = (input as Record<string, unknown>).requests;
+    return { requests: Array.isArray(requests) ? requests.length : 0 };
+  }
   return input;
 }
 
@@ -162,28 +188,60 @@ export function summarizeToolInput(name: string, input: unknown): unknown {
 // an unguessable per-run token. Survives HMR via global, like run-queue.
 // ---------------------------------------------------------------------------
 
+/** A token-scoped MCP entry: the run's context plus the tool set it exposes. */
+export interface ToolEntry {
+  ctx: unknown;
+  tools: ToolDef<unknown>[];
+}
+
 const globalForContexts = globalThis as unknown as {
-  runToolContexts?: Map<string, RunToolContext>;
+  runToolContexts?: Map<string, ToolEntry>;
 };
 
-function contexts(): Map<string, RunToolContext> {
+function contexts(): Map<string, ToolEntry> {
   if (!globalForContexts.runToolContexts) {
     globalForContexts.runToolContexts = new Map();
   }
   return globalForContexts.runToolContexts;
 }
 
-/** Register a run's tool context; returns the token for its MCP URL. */
-export function registerRunToolContext(ctx: RunToolContext): string {
+/**
+ * Register a run's tool context + its tool set; returns the token for its MCP
+ * URL. The tool set travels with the token so the HTTP MCP route serves the
+ * right tools per run (render tools for a render run, planner tools for a
+ * planner run) without importing any tool set statically.
+ */
+export function registerToolContext<Ctx>(
+  ctx: Ctx,
+  tools: ToolDef<Ctx>[],
+): string {
   const token = crypto.randomUUID();
-  contexts().set(token, ctx);
+  contexts().set(token, {
+    ctx,
+    tools: tools as unknown as ToolDef<unknown>[],
+  });
   return token;
 }
 
-export function getRunToolContext(token: string): RunToolContext | undefined {
+export function getToolEntry(token: string): ToolEntry | undefined {
   return contexts().get(token);
 }
 
-export function releaseRunToolContext(token: string): void {
+export function releaseToolContext(token: string): void {
   contexts().delete(token);
+}
+
+// --- back-compat wrappers (render path) ---
+
+/** Register a render run's tool context (RUN_TOOLS). */
+export function registerRunToolContext(ctx: RunToolContext): string {
+  return registerToolContext(ctx, RUN_TOOLS);
+}
+
+export function getRunToolContext(token: string): RunToolContext | undefined {
+  return contexts().get(token)?.ctx as RunToolContext | undefined;
+}
+
+export function releaseRunToolContext(token: string): void {
+  releaseToolContext(token);
 }

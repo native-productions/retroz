@@ -10,6 +10,7 @@ const TAB_VALUES = [
   "fonts",
   "skills",
   "tasks",
+  "plan",
   "schedule",
 ] as const;
 
@@ -19,6 +20,7 @@ export function WorkflowTabs({
   fonts,
   skills,
   tasks,
+  plan,
   schedule,
   counts,
 }: {
@@ -27,6 +29,7 @@ export function WorkflowTabs({
   fonts: React.ReactNode;
   skills: React.ReactNode;
   tasks: React.ReactNode;
+  plan: React.ReactNode;
   schedule: React.ReactNode;
   counts: {
     assets: number;
@@ -34,6 +37,7 @@ export function WorkflowTabs({
     schedules: number;
     fonts: number;
     skills: number;
+    campaigns: number;
   };
 }) {
   const router = useRouter();
@@ -59,6 +63,7 @@ export function WorkflowTabs({
         <TabsTrigger value="fonts">Fonts · {counts.fonts}</TabsTrigger>
         <TabsTrigger value="skills">Skills · {counts.skills}</TabsTrigger>
         <TabsTrigger value="tasks">Tasks · {counts.tasks}</TabsTrigger>
+        <TabsTrigger value="plan">Plan · {counts.campaigns}</TabsTrigger>
         <TabsTrigger value="schedule">
           Schedule · {counts.schedules}
         </TabsTrigger>
@@ -68,6 +73,7 @@ export function WorkflowTabs({
       <TabsContent value="fonts">{fonts}</TabsContent>
       <TabsContent value="skills">{skills}</TabsContent>
       <TabsContent value="tasks">{tasks}</TabsContent>
+      <TabsContent value="plan">{plan}</TabsContent>
       <TabsContent value="schedule">{schedule}</TabsContent>
     </Tabs>
   );

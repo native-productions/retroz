@@ -1,8 +1,5 @@
 import { z } from "zod";
-import {
-  RUN_TOOLS,
-  getRunToolContext,
-} from "@/lib/run-tools";
+import { getToolEntry } from "@/lib/run-tools";
 
 // Streamable-HTTP MCP endpoint serving the retroz tools to the Codex CLI,
 // which runs out-of-process and cannot use the in-process SDK server.
@@ -32,8 +29,9 @@ export async function POST(
   { params }: { params: Promise<{ token: string }> },
 ) {
   const { token } = await params;
-  const ctx = getRunToolContext(token);
-  if (!ctx) return new Response("Unknown run", { status: 404 });
+  const entry = getToolEntry(token);
+  if (!entry) return new Response("Unknown run", { status: 404 });
+  const { ctx, tools } = entry;
 
   const msg = (await req.json()) as JsonRpcMessage;
 
@@ -55,7 +53,7 @@ export async function POST(
 
     case "tools/list":
       return rpcResult(msg.id, {
-        tools: RUN_TOOLS.map((t) => ({
+        tools: tools.map((t) => ({
           name: t.name,
           description: t.description,
           inputSchema: z.toJSONSchema(z.object(t.shape)),
@@ -64,7 +62,7 @@ export async function POST(
 
     case "tools/call": {
       const name = msg.params?.name as string | undefined;
-      const def = RUN_TOOLS.find((t) => t.name === name);
+      const def = tools.find((t) => t.name === name);
       if (!def) return rpcError(msg.id, -32602, `Unknown tool: ${name}`);
       const parsed = z.object(def.shape).safeParse(msg.params?.arguments ?? {});
       if (!parsed.success) {

@@ -4,29 +4,27 @@ import {
   tool,
 } from "@anthropic-ai/claude-agent-sdk";
 import type { ClaudeRunInput, AgentRunResult } from "@/lib/agent-backend";
-import { RUN_TOOLS, summarizeToolInput } from "@/lib/run-tools";
+import { summarizeToolInput } from "@/lib/run-tools";
 
-const ALLOWED_TOOLS = [
-  "Read",
-  "Write",
-  "Glob",
-  "Grep",
-  "Bash",
-  ...RUN_TOOLS.map((t) => `mcp__retroz__${t.name}`),
-];
+const DEFAULT_BASE_TOOLS = ["Read", "Write", "Glob", "Grep", "Bash"];
 
 /** Run one task on the local Claude Code engine (Agent SDK). */
 export async function runClaudeAgent(input: ClaudeRunInput): Promise<AgentRunResult> {
-  // In-process MCP server wrapping the shared retroz tools.
+  // In-process MCP server wrapping this run's tool set (render or planner).
   const mcpServer = createSdkMcpServer({
     name: "retroz",
     version: "1.0.0",
-    tools: RUN_TOOLS.map((t) =>
+    tools: input.tools.map((t) =>
       tool(t.name, t.description, t.shape, (args) =>
         t.execute(input.toolContext, args),
       ),
     ),
   });
+
+  const allowedTools = [
+    ...(input.baseTools ?? DEFAULT_BASE_TOOLS),
+    ...input.tools.map((t) => `mcp__retroz__${t.name}`),
+  ];
 
   // Subscription auth: strip the API key so the CLI uses the local login.
   const env: Record<string, string> = {};
@@ -47,7 +45,7 @@ export async function runClaudeAgent(input: ClaudeRunInput): Promise<AgentRunRes
       skills: input.skills,
       permissionMode: "bypassPermissions",
       allowDangerouslySkipPermissions: true,
-      allowedTools: ALLOWED_TOOLS,
+      allowedTools,
       mcpServers: { retroz: mcpServer },
       includePartialMessages: false,
       env,

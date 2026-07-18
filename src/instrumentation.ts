@@ -5,4 +5,6 @@ export async function register() {
   if (process.env.NEXT_RUNTIME !== "nodejs") return;
   const { bootScheduler } = await import("@/lib/cron-scheduler");
   await bootScheduler();
+  const { bootCampaignTicker } = await import("@/lib/campaign-ticker");
+  bootCampaignTicker();
 }
