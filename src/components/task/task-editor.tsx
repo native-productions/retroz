@@ -14,7 +14,7 @@ import {
   SelectContent,
   SelectItem,
 } from "@/components/ui/ui-select";
-import { MODEL_OPTIONS } from "@/lib/models";
+import { ModelSelectOptions } from "@/components/model-select-options";
 import { updateTask } from "@/lib/actions/task-actions";
 
 export function TaskEditor({
@@ -114,11 +114,7 @@ export function TaskEditor({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="default">Workflow default</SelectItem>
-                  {MODEL_OPTIONS.map((m) => (
-                    <SelectItem key={m.value} value={m.value}>
-                      {m.label}
-                    </SelectItem>
-                  ))}
+                  <ModelSelectOptions />
                 </SelectContent>
               </Select>
             </Field>

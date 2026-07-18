@@ -5,6 +5,8 @@ const nextConfig: NextConfig = {
   // bundled by webpack/turbopack for the server runtime.
   serverExternalPackages: [
     "@anthropic-ai/claude-agent-sdk",
+    "@openai/codex-sdk",
+    "@openai/codex",
     "playwright",
     "@prisma/client",
     "@prisma/adapter-pg",

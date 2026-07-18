@@ -13,7 +13,7 @@ import {
   SelectContent,
   SelectItem,
 } from "@/components/ui/ui-select";
-import { MODEL_OPTIONS } from "@/lib/models";
+import { ModelSelectOptions } from "@/components/model-select-options";
 import { updateWorkflow, deleteWorkflow } from "@/lib/actions/workflow-actions";
 
 export function WorkflowInstructionEditor({
@@ -66,11 +66,7 @@ export function WorkflowInstructionEditor({
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="default">Use app default</SelectItem>
-              {MODEL_OPTIONS.map((m) => (
-                <SelectItem key={m.value} value={m.value}>
-                  {m.label}
-                </SelectItem>
-              ))}
+              <ModelSelectOptions />
             </SelectContent>
           </Select>
         </Field>

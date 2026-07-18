@@ -24,7 +24,7 @@ import {
   DialogFooter,
   DialogClose,
 } from "@/components/ui/ui-dialog";
-import { MODEL_OPTIONS } from "@/lib/models";
+import { ModelSelectOptions } from "@/components/model-select-options";
 import { createTask } from "@/lib/actions/task-actions";
 
 export function TaskCreateDialog({
@@ -123,11 +123,7 @@ export function TaskCreateDialog({
                 </SelectTrigger>
                 <SelectContent>
                   <SelectItem value="default">Workflow default</SelectItem>
-                  {MODEL_OPTIONS.map((m) => (
-                    <SelectItem key={m.value} value={m.value}>
-                      {m.label}
-                    </SelectItem>
-                  ))}
+                  <ModelSelectOptions />
                 </SelectContent>
               </Select>
             </Field>

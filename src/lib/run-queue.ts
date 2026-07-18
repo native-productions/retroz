@@ -1,7 +1,7 @@
 import PQueue from "p-queue";
-import { executeRun } from "@/lib/claude-runner";
+import { executeRun } from "@/lib/run-executor";
 
-// Serial queue — never run two Claude spawns at once. Survives HMR via global.
+// Serial queue — never run two agent spawns at once. Survives HMR via global.
 const globalForQueue = globalThis as unknown as { runQueue?: PQueue };
 
 function queue(): PQueue {

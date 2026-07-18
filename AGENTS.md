@@ -31,6 +31,7 @@ See `PRODUCT.md` for what it does and `DESIGN.md` for the visual system.
 - Tailwind v4 (CSS-first `@theme`, no `tailwind.config`) — see `DESIGN.md`
 - Prisma 7 + PostgreSQL (rust-free `prisma-client` generator)
 - `@anthropic-ai/claude-agent-sdk` — spawns the local Claude
+- `@openai/codex-sdk` — spawns the local Codex CLI (alternative engine)
 - Playwright (chromium) — HTML → PNG
 - Auth.js v5 (single seeded user) · node-cron · p-queue · fontkit · sharp
 
@@ -58,15 +59,21 @@ src/
     api/              route handlers (Node runtime only):
                         assets/upload, fonts/upload, fonts/catalog,
                         tasks/[id]/run, runs/[id]/stream (SSE), media,
-                        auth/[...nextauth]
+                        mcp/[token] (HTTP MCP for Codex), auth/[...nextauth]
   lib/
     db-client.ts        Prisma singleton (pg driver adapter)
     auth.ts / auth-config.ts   Auth.js (split: edge-safe config vs full)
-    claude-runner.ts    THE engine — builds prompt + MCP tools, runs query(),
-                        streams + persists events, records artifacts
+    run-executor.ts     THE engine orchestrator — resolves provider/model/fonts,
+                        builds the prompt, dispatches to a backend, owns all
+                        TaskRun bookkeeping
+    agent-backend.ts    backend contract (inputs, events, uniform result)
+    claude-backend.ts   Claude Agent SDK backend (query(), in-process MCP)
+    codex-backend.ts    Codex CLI backend (codex-sdk thread, HTTP MCP)
+    run-tools.ts        shared retroz tool defs (render/list/search) + per-run
+                        token registry for the HTTP MCP route
     png-compositor.ts   Playwright HTML→PNG (renders via file:// temp html)
     prompt-builder.ts   assembles the run prompt (instruction + assets + fonts)
-    run-queue.ts        p-queue, concurrency 1 (never 2 Claude spawns at once)
+    run-queue.ts        p-queue, concurrency 1 (never 2 agent spawns at once)
     run-bus.ts          in-process pub/sub for live SSE
     cron-scheduler.ts   node-cron jobs, booted from instrumentation.ts
     google-fonts.ts     download a font's woff2 (latin subset) from css2 API
@@ -87,21 +94,32 @@ data/                   assets + task outputs + fonts (gitignored)
 ## How a run works (the core)
 
 1. User hits **Run now** → `taskRun` row (QUEUED) → `enqueueRun` (serial queue).
-2. `executeRun` (`claude-runner.ts`): makes the output folder
-   `data/tasks/<workflow>/<Task Name | YYYY-MM-DD HH:mm>/`, resolves the model
-   (task → workflow → settings default), resolves fonts (workflow-assigned, else
-   whole enabled bank), builds `@font-face` CSS + the prompt.
-3. Runs `query()` with `cwd` = output folder, `additionalDirectories` = asset
-   folder, `settingSources: ["user","project"]` (loads `~/.claude` + project
-   skills), `permissionMode: "bypassPermissions"`, and an in-process MCP server
-   named **`retroz`** exposing `render_html_to_png` + `list_assets` (tool names
-   are prefixed `mcp__retroz__*` — the `allowedTools` list must match this exact
-   prefix or Claude can't call the renderer).
-4. Claude reads photos, writes HTML overlays, calls `render_html_to_png`. The
+2. `executeRun` (`run-executor.ts`): makes the output folder
+   `data/tasks/<workflow>/<Task Name | YYYY-MM-DD HH:mm>/`, resolves the engine
+   provider (`AppSetting.provider`: CLAUDE or CODEX) and the model
+   (run → task → workflow → settings default, filtered to the active provider's
+   catalog by `resolveModel`), resolves fonts (workflow-assigned, else whole
+   enabled bank), builds `@font-face` CSS + the prompt, then dispatches to the
+   provider backend.
+3. **Claude backend** (`claude-backend.ts`): runs `query()` with `cwd` = output
+   folder, `additionalDirectories` = asset folder, `settingSources:
+   ["user","project"]` (loads `~/.claude` + project skills), `permissionMode:
+   "bypassPermissions"`, and an in-process MCP server named **`retroz`** wrapping
+   the shared tools in `run-tools.ts` (tool names are prefixed `mcp__retroz__*` —
+   the `allowedTools` list must match this exact prefix or Claude can't call the
+   renderer).
+   **Codex backend** (`codex-backend.ts`): starts a codex-sdk thread
+   (`workspace-write` sandbox, `approvalPolicy: "never"`, auth from `~/.codex`)
+   and serves the same retroz tools over the token-scoped HTTP MCP route
+   `api/mcp/[token]` (excluded from the auth gate; the unguessable per-run token
+   is the auth and dies with the run).
+4. The agent reads photos, writes HTML overlays, calls `render_html_to_png`. The
    compositor injects the font faces, renders via a `file://` temp page (so
    local fonts + photos load), screenshots to PNG (2× / retina).
-5. Every SDK message → persisted `RunEvent` + emitted on the bus → the run viewer
-   streams it live (SSE). Artifacts recorded as `RunArtifact`.
+5. Every backend event → persisted `RunEvent` + emitted on the bus → the run
+   viewer streams it live (SSE). Artifacts recorded as `RunArtifact`. The
+   backend returns one uniform result; `run-executor.ts` writes the final
+   status/usage to `TaskRun`.
 
 ## Conventions
 

@@ -51,6 +51,23 @@ export function SelectContent({
   );
 }
 
+export const SelectGroup = SelectPrimitive.Group;
+
+export function SelectLabel({
+  className,
+  ...props
+}: React.ComponentPropsWithoutRef<typeof SelectPrimitive.Label>) {
+  return (
+    <SelectPrimitive.Label
+      className={cn(
+        "px-2 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-fg-muted",
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
 export function SelectItem({
   className,
   children,

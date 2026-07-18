@@ -1,3 +1,5 @@
+import type { AgentProvider } from "@/generated/prisma/enums";
+
 interface AssetForPrompt {
   filename: string;
   absPath: string;
@@ -33,6 +35,7 @@ interface SkillForPrompt {
 }
 
 export function buildRunPrompt(input: {
+  provider: AgentProvider;
   workflowName: string;
   platform: string;
   globalInstruction: string;
@@ -49,6 +52,7 @@ export function buildRunPrompt(input: {
   skills: SkillForPrompt[];
 }): string {
   const {
+    provider,
     workflowName,
     platform,
     globalInstruction,
@@ -166,7 +170,7 @@ that fit the mood of the content and the workflow instruction.
 ${fontList}${pairingList}
 ${skillsBlock}
 === HOW TO WORK ===
-1. Inspect the source photos (use the Read tool on their paths) so overlays fit
+1. Inspect the source photos (use the ${provider === "CODEX" ? "view_image" : "Read"} tool on their paths) so overlays fit
    the actual composition.
 2. For EACH final image, build a complete self-contained HTML document. Embed
    the source photo as the background using its absolute file:// path

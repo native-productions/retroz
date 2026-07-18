@@ -27,6 +27,12 @@ model User {
 // App settings (singleton row, id = "singleton")
 // ---------------------------------------------------------------------------
 
+// Which local coding agent executes runs.
+enum AgentProvider {
+  CLAUDE
+  CODEX
+}
+
 enum ClaudeAuthMode {
   SUBSCRIPTION
   API_KEY
@@ -34,8 +40,12 @@ enum ClaudeAuthMode {
 
 model AppSetting {
   id             String         @id @default("singleton")
+  provider       AgentProvider  @default(CLAUDE)
   defaultModel   String         @default("sonnet")
   claudeAuthMode ClaudeAuthMode @default(SUBSCRIPTION)
+  // Codex engine defaults (used when provider = CODEX).
+  codexModel           String @default("gpt-5.4")
+  codexReasoningEffort String @default("medium")
   assetsRoot     String         @default("data/assets")
   tasksRoot      String         @default("data/tasks")
   updatedAt      DateTime       @updatedAt
@@ -208,8 +218,10 @@ model TaskRun {
 
   status          RunStatus @default(QUEUED)
   outputRelPath   String?
+  provider        AgentProvider @default(CLAUDE)
   model           String?
-  claudeSessionId String?
+  // Engine session id — Claude session or Codex thread, per provider.
+  sessionId       String?
   tokensIn            Int       @default(0)
   tokensOut           Int       @default(0)
   cacheCreationTokens Int       @default(0)
@@ -218,7 +230,7 @@ model TaskRun {
   durationMs          Int?
   durationApiMs       Int?
   costUsd             Float     @default(0)
-  modelUsage          Json?     // Record<model, ModelUsage> from the Agent SDK result
+  modelUsage          Json?     // Provider-shaped usage detail (Agent SDK modelUsage / Codex turn usage)
   error           String?
   trigger         String    @default("manual") // manual | schedule
   scheduleId      String?
