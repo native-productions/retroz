@@ -80,6 +80,8 @@ export const campaignCreateSchema = z.object({
   workflowId: z.string().min(1),
   name: z.string().min(1, "Name is required").max(120),
   brief: z.string().max(20000).optional(),
+  format: z.enum(["SINGLE", "CAROUSEL"]).default("SINGLE"),
+  model: z.string().nullable().optional(),
 });
 
 export const campaignItemUpdateSchema = z.object({

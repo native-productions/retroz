@@ -195,6 +195,9 @@ model Task {
   assetFolderId String?
   assetFolder   AssetFolder? @relation(fields: [assetFolderId], references: [id], onDelete: SetNull)
   model         String?
+  // Optional engine override (campaign tasks pin the campaign's engine). Null =
+  // use the global AppSetting provider at run time.
+  provider      AgentProvider?
   scheduleId    String?
   schedule      Schedule? @relation(fields: [scheduleId], references: [id], onDelete: SetNull)
   enabled       Boolean  @default(true)
@@ -329,6 +332,13 @@ enum CampaignItemStatus {
   SKIPPED
 }
 
+// Single = one image per post; Carousel = the planner requests 3–8 images per
+// post and decides the count from the content.
+enum CampaignFormat {
+  SINGLE
+  CAROUSEL
+}
+
 model Campaign {
   id         String   @id @default(cuid())
   workflowId String
@@ -338,7 +348,13 @@ model Campaign {
   brief        String         @default("")
   briefRelPath String?        // set when the brief came from an uploaded/saved file
   status       CampaignStatus @default(DRAFT)
+  format       CampaignFormat @default(SINGLE)
   timezone     String         @default("Asia/Jakarta")
+
+  // Chosen engine for this campaign's planner + render tasks. Null = use the
+  // global AppSetting. Model may name a Claude or a Codex model.
+  provider AgentProvider?
+  model    String?
 
   // Schedule params, captured at approve time.
   startDate    DateTime?

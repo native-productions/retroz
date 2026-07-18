@@ -13,6 +13,7 @@ export interface PlannerPromptInput {
   platform: string;
   globalInstruction: string;
   campaignName: string;
+  format: "SINGLE" | "CAROUSEL";
   briefText: string;
   /** Absolute path of an uploaded brief file the planner may Read (e.g. a PDF). */
   briefFileAbs: string | null;
@@ -33,12 +34,22 @@ export function buildPlannerPrompt(input: PlannerPromptInput): string {
     platform,
     globalInstruction,
     campaignName,
+    format,
     briefText,
     briefFileAbs,
     scope,
     existingItems,
     targetItem,
   } = input;
+
+  const formatRule =
+    format === "CAROUSEL"
+      ? "Each post is a CAROUSEL of 3–8 images. Decide the slide count per post from its content. " +
+        "In each item's `instruction`, state it is a carousel of N slides and describe every slide " +
+        "(slide 1 hook, following slides, last slide CTA). Each item's `assetSlots` must list the " +
+        "3–8 photos that post needs, and the asset manifest must cover all of them."
+      : "Each post is a SINGLE image. Each item uses exactly one photo — its `assetSlots` reference " +
+        "one photo, and the `instruction` describes that single image.";
 
   const lines: string[] = [];
 
@@ -81,6 +92,8 @@ export function buildPlannerPrompt(input: PlannerPromptInput): string {
     }
     lines.push("");
   }
+
+  lines.push("## Image format", formatRule, "");
 
   if (scope === "reroll" && targetItem) {
     lines.push(

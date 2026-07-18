@@ -43,9 +43,10 @@ export async function executePlannerRun(planRunId: string): Promise<void> {
     create: { id: "singleton" },
   });
 
-  const provider = settings.provider;
+  const provider = campaign.provider ?? settings.provider;
   const model = resolveModel(provider, [
     planRun.model,
+    campaign.model,
     campaign.workflow.defaultModel,
     provider === "CODEX" ? settings.codexModel : settings.defaultModel,
   ]);
@@ -86,6 +87,7 @@ export async function executePlannerRun(planRunId: string): Promise<void> {
     platform: campaign.workflow.platform,
     globalInstruction: campaign.workflow.globalInstruction,
     campaignName: campaign.name,
+    format: campaign.format as "SINGLE" | "CAROUSEL",
     briefText: campaign.brief,
     briefFileAbs: campaign.briefRelPath ? toAbsolute(campaign.briefRelPath) : null,
     scope: planRun.scope as "full" | "reroll" | "add",

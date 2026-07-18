@@ -6,6 +6,7 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import { db } from "@/lib/db-client";
 import { toAbsolute, slugify } from "@/lib/paths";
+import { providerOfModel } from "@/lib/models";
 import { enqueuePlannerRun } from "@/lib/run-queue";
 import { campaignDir } from "@/lib/planner-executor";
 import { zonedInstant } from "@/lib/campaign-time";
@@ -53,11 +54,17 @@ export async function createCampaign(input: unknown) {
     },
   });
 
+  // Model implies the engine — a Codex model pins the campaign to Codex, etc.
+  const provider = providerOfModel(data.model);
+
   const campaign = await db.campaign.create({
     data: {
       workflowId: data.workflowId,
       name: data.name,
       brief: data.brief ?? "",
+      format: data.format,
+      model: data.model ?? null,
+      provider,
       assetFolderId: folder.id,
     },
   });
@@ -164,14 +171,16 @@ export async function approveCampaign(input: unknown) {
     },
   });
 
-  // Render tasks inherit the model used to generate the plan (e.g. a Codex model
-  // when the campaign was planned under Codex), not the workflow default.
+  // Render tasks inherit the campaign's chosen engine + model (falling back to
+  // the model the planner actually ran with, then the workflow default).
   const lastPlan = await db.campaignPlanRun.findFirst({
     where: { campaignId: campaign.id, status: "DONE" },
     orderBy: { createdAt: "desc" },
-    select: { model: true },
+    select: { model: true, provider: true },
   });
-  const taskModel = lastPlan?.model ?? campaign.workflow.defaultModel ?? null;
+  const taskProvider = campaign.provider ?? lastPlan?.provider ?? null;
+  const taskModel =
+    campaign.model ?? lastPlan?.model ?? campaign.workflow.defaultModel ?? null;
 
   // Validate every item fits the chosen window before materializing anything.
   for (const item of campaign.items) {
@@ -201,6 +210,7 @@ export async function approveCampaign(input: unknown) {
         instruction: item.instruction,
         assetFolderId: campaign.assetFolderId,
         model: taskModel,
+        provider: taskProvider,
       },
     });
     await db.campaignItem.update({

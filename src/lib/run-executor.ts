@@ -44,7 +44,8 @@ export async function executeRun(taskRunId: string): Promise<void> {
     create: { id: "singleton" },
   });
 
-  const provider = settings.provider;
+  // A task may pin its engine (campaign tasks do); else use the global setting.
+  const provider = task.provider ?? settings.provider;
   const model = resolveModel(provider, [
     run.model,
     task.model,

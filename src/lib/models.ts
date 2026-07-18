@@ -47,6 +47,15 @@ export const MODEL_GROUPS = PROVIDER_OPTIONS.map((p) => ({
   options: MODEL_OPTIONS[p.value],
 }));
 
+/** Which provider's catalog a model value belongs to, or null if unknown. */
+export function providerOfModel(value?: string | null): AgentProvider | null {
+  if (!value) return null;
+  for (const [provider, options] of Object.entries(MODEL_OPTIONS)) {
+    if (options.some((m) => m.value === value)) return provider as AgentProvider;
+  }
+  return null;
+}
+
 export function modelLabel(value?: string | null): string {
   if (!value) return "Default";
   for (const options of Object.values(MODEL_OPTIONS)) {
