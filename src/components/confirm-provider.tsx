@@ -3,6 +3,7 @@
 import * as React from "react";
 import { TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/ui-button";
+import { Input } from "@/components/ui/ui-input";
 import {
   Dialog,
   DialogContent,
@@ -19,6 +20,8 @@ export interface ConfirmOptions {
   confirmLabel?: string;
   cancelLabel?: string;
   tone?: "danger" | "default";
+  /** When set, the user must type this exact word before confirm is enabled. */
+  requireText?: string;
 }
 
 type ConfirmFn = (opts: ConfirmOptions) => Promise<boolean>;
@@ -40,9 +43,11 @@ interface State {
 
 export function ConfirmProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = React.useState<State | null>(null);
+  const [text, setText] = React.useState("");
 
   const confirm = React.useCallback<ConfirmFn>((opts) => {
     return new Promise<boolean>((resolve) => {
+      setText("");
       setState({ open: true, opts, resolve });
     });
   }, []);
@@ -54,6 +59,13 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
 
   const opts = state?.opts;
   const danger = opts?.tone !== "default";
+  const requireText = opts?.requireText?.trim() ?? "";
+  const textOk =
+    !requireText || text.trim().toLowerCase() === requireText.toLowerCase();
+
+  function tryConfirm() {
+    if (textOk) settle(true);
+  }
 
   return (
     <ConfirmContext.Provider value={confirm}>
@@ -78,15 +90,36 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
               <DialogDescription>{opts.description}</DialogDescription>
             ) : null}
           </DialogHeader>
-          <DialogBody className="pt-0" />
+          {requireText ? (
+            <DialogBody className="pt-0">
+              <label className="flex flex-col gap-1.5">
+                <span className="font-mono text-xs text-fg-muted">
+                  Type{" "}
+                  <span className="font-semibold text-fg">{requireText}</span> to
+                  confirm
+                </span>
+                <Input
+                  value={text}
+                  onChange={(e) => setText(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && tryConfirm()}
+                  placeholder={requireText}
+                  autoFocus
+                  autoComplete="off"
+                />
+              </label>
+            </DialogBody>
+          ) : (
+            <DialogBody className="pt-0" />
+          )}
           <DialogFooter>
             <Button variant="ghost" onClick={() => settle(false)}>
               {opts?.cancelLabel ?? "Cancel"}
             </Button>
             <Button
               variant={danger ? "danger" : "primary"}
-              onClick={() => settle(true)}
-              autoFocus
+              onClick={tryConfirm}
+              disabled={!textOk}
+              autoFocus={!requireText}
             >
               {opts?.confirmLabel ?? (danger ? "Delete" : "Confirm")}
             </Button>

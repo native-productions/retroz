@@ -63,7 +63,7 @@ export function WorkflowTabs({
         <TabsTrigger value="fonts">Fonts · {counts.fonts}</TabsTrigger>
         <TabsTrigger value="skills">Skills · {counts.skills}</TabsTrigger>
         <TabsTrigger value="tasks">Tasks · {counts.tasks}</TabsTrigger>
-        <TabsTrigger value="plan">Plan · {counts.campaigns}</TabsTrigger>
+        <TabsTrigger value="plan">Campaign · {counts.campaigns}</TabsTrigger>
         <TabsTrigger value="schedule">
           Schedule · {counts.schedules}
         </TabsTrigger>

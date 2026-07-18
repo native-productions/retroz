@@ -28,6 +28,18 @@ function TabEmpty({ children }: { children: React.ReactNode }) {
   return <p className="font-mono text-sm text-fg-muted">{children}</p>;
 }
 
+/** A labelled read-only field for the Settings tab. */
+function Info({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0">
+      <dt className="font-mono text-[10px] uppercase tracking-wide text-fg-muted">
+        {label}
+      </dt>
+      <dd className="truncate font-display text-sm font-semibold">{value}</dd>
+    </div>
+  );
+}
+
 export default async function CampaignDetailPage({
   params,
 }: {
@@ -139,38 +151,29 @@ export default async function CampaignDetailPage({
 
   // --- tab: brief (brief + run planner; splits to brief | planner runner once
   //     a plan exists, so the Planner tab is no longer needed) ---
-  const briefColumn = (
-    <div className="flex flex-col gap-5">
-      <Card className="p-4">
-        {campaign.brief ? (
-          <div className="max-h-96 overflow-y-auto">
-            <Markdown>{campaign.brief}</Markdown>
-          </div>
-        ) : (
-          <TabEmpty>No brief text.</TabEmpty>
-        )}
-        {campaign.briefRelPath ? (
-          <p className="mt-2 inline-flex items-center gap-1.5 font-mono text-xs text-fg-muted">
-            <FileText className="size-3.5" /> {campaign.briefRelPath}
-          </p>
-        ) : null}
-      </Card>
-
-      {canPlan ? (
-        <div>
-          <ActionButton
-            action={runPlanner.bind(null, campaign.id, "full", undefined)}
-            variant="primary"
-            size="sm"
-            disabled={planning}
-          >
-            <Sparkles className="size-4" />{" "}
-            {planning ? "Planning…" : "Run planner"}
-          </ActionButton>
-        </div>
-      ) : null}
-    </div>
+  const briefBody = campaign.brief ? (
+    <Markdown>{campaign.brief}</Markdown>
+  ) : (
+    <TabEmpty>No brief text.</TabEmpty>
   );
+  const briefFooter = campaign.briefRelPath ? (
+    <p className="mt-2 inline-flex items-center gap-1.5 font-mono text-xs text-fg-muted">
+      <FileText className="size-3.5" /> {campaign.briefRelPath}
+    </p>
+  ) : null;
+  const runButton = canPlan ? (
+    <div>
+      <ActionButton
+        action={runPlanner.bind(null, campaign.id, "full", undefined)}
+        variant="primary"
+        size="sm"
+        disabled={planning}
+      >
+        <Sparkles className="size-4" />{" "}
+        {planning ? "Planning…" : "Run planner"}
+      </ActionButton>
+    </div>
+  ) : null;
 
   const plannerColumn = latestPlan ? (
     <CampaignPlannerViewer
@@ -185,20 +188,55 @@ export default async function CampaignDetailPage({
     />
   ) : null;
 
-  const briefNode = (
+  const briefNode = plannerColumn ? (
+    // Two equal-height views: brief on the left, live planner runner on the
+    // right. A fixed row height makes both columns line up.
+    <div className="grid gap-5 lg:h-[540px] lg:grid-cols-2">
+      <div className="flex h-full min-h-0 flex-col gap-4">
+        <Card className="flex min-h-0 flex-1 flex-col p-4">
+          <div className="min-h-0 flex-1 overflow-y-auto">{briefBody}</div>
+          {briefFooter}
+        </Card>
+        {runButton}
+      </div>
+      <div className="h-full">{plannerColumn}</div>
+    </div>
+  ) : (
     <div className="flex flex-col gap-5">
-      {plannerColumn ? (
-        // Two views: brief on the left, live planner runner on the right.
-        <div className="grid items-start gap-5 lg:grid-cols-2">
-          {briefColumn}
-          {plannerColumn}
-        </div>
-      ) : (
-        briefColumn
-      )}
+      <Card className="p-4">
+        <div className="max-h-96 overflow-y-auto">{briefBody}</div>
+        {briefFooter}
+      </Card>
+      {runButton}
+    </div>
+  );
+
+  // --- tab: settings (campaign details + danger zone) ---
+  const settingsNode = (
+    <div className="flex flex-col gap-5">
+      <Card className="p-4">
+        <p className="mb-3 font-display text-sm font-semibold">
+          Campaign details
+        </p>
+        <dl className="grid grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-3">
+          <Info label="Workflow" value={campaign.workflow.name} />
+          <Info label="Format" value={campaign.format} />
+          <Info label="Model" value={campaign.model ?? "workflow default"} />
+          <Info label="Engine" value={campaign.provider ?? "default"} />
+          <Info label="Timezone" value={campaign.timezone} />
+          <Info
+            label="Schedule"
+            value={
+              campaign.durationDays
+                ? `${campaign.durationDays}d · ${campaign.slotsPerDay ?? 1}/day`
+                : "not scheduled"
+            }
+          />
+        </dl>
+      </Card>
 
       {/* Danger zone */}
-      <div className="mt-2 flex items-center justify-between gap-3 rounded-[var(--radius-retro)] border-2 border-danger/40 bg-danger/5 p-4">
+      <div className="flex items-center justify-between gap-3 rounded-[var(--radius-retro)] border-2 border-danger/40 bg-danger/5 p-4">
         <div>
           <p className="font-display text-sm font-semibold">Danger zone</p>
           <p className="text-xs text-fg-muted">
@@ -225,9 +263,11 @@ export default async function CampaignDetailPage({
             action={deleteCampaign.bind(null, campaign.id)}
             confirm={{
               title: `Delete "${campaign.name}"?`,
-              description: "This cannot be undone.",
-              confirmLabel: "Delete",
+              description:
+                "Every task and all generated results for this campaign are permanently deleted. Your uploaded assets are kept in the workflow. This cannot be undone.",
+              confirmLabel: "Delete campaign",
               tone: "danger",
+              requireText: "delete",
             }}
             variant="danger"
             size="sm"
@@ -363,6 +403,7 @@ export default async function CampaignDetailPage({
           calendar={calendarNode}
           photos={photosNode}
           schedule={scheduleNode}
+          settings={settingsNode}
         />
       </PageBody>
     </>

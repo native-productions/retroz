@@ -278,14 +278,12 @@ export async function cancelCampaign(id: string) {
 export async function deleteCampaign(id: string) {
   const campaign = await db.campaign.findUniqueOrThrow({
     where: { id },
-    include: {
-      items: { select: { taskId: true } },
-      assetFolder: { select: { id: true, relPath: true } },
-    },
+    include: { items: { select: { taskId: true } } },
   });
 
-  // Delete the render tasks this campaign owns (cascades their TaskRuns) — the
-  // campaign delete only cascades CampaignItem rows, leaving tasks orphaned.
+  // Delete the render tasks this campaign owns + their generated outputs
+  // (cascades their TaskRuns) — the campaign delete only cascades CampaignItem
+  // rows, leaving tasks orphaned.
   const taskIds = campaign.items
     .map((i) => i.taskId)
     .filter((t): t is string => Boolean(t));
@@ -296,16 +294,8 @@ export async function deleteCampaign(id: string) {
 
   await db.campaign.delete({ where: { id } });
 
-  // Remove the campaign's dedicated asset folder (+ files) and planner scratch dir.
-  if (campaign.assetFolder) {
-    await db.assetFolder
-      .delete({ where: { id: campaign.assetFolder.id } })
-      .catch(() => null);
-    await fs.rm(toAbsolute(campaign.assetFolder.relPath), {
-      recursive: true,
-      force: true,
-    });
-  }
+  // Keep the uploaded assets + their folder (they may be reused). Only the
+  // planner's scratch dir is disposable.
   await fs.rm(campaignDir(id), { recursive: true, force: true });
 
   revalidatePath(`/workflows/${campaign.workflowId}`);

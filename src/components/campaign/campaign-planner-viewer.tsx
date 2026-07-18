@@ -58,14 +58,14 @@ export function CampaignPlannerViewer({
   }, [events.length]);
 
   return (
-    <div className="retro-card flex flex-col overflow-hidden">
+    <div className="retro-card flex h-full max-h-[70vh] flex-col overflow-hidden">
       <div className="flex items-center justify-between gap-2 border-b-2 border-border bg-surface-2 px-4 py-2.5">
         <span className="inline-flex items-center gap-2 font-mono text-xs font-semibold uppercase tracking-wide">
           <Terminal className="size-4" /> Planner activity
         </span>
         <RunStatusBadge status={status} />
       </div>
-      <div className="flex max-h-[50vh] min-h-40 flex-1 flex-col gap-3 overflow-y-auto p-4">
+      <div className="flex min-h-40 flex-1 flex-col gap-3 overflow-y-auto p-4">
         {events.length === 0 ? (
           <p className="font-mono text-sm text-fg-muted">
             {isLive ? "Waiting for the planner…" : "No activity recorded."}

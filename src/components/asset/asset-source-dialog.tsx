@@ -61,6 +61,7 @@ export function AssetSourceDialog({
   pexelsQuery = "",
   title = "Add photos",
   onImported,
+  trigger,
 }: {
   scope: Scope;
   /** Seeds each folder Asset's description (campaign requested-photo label). */
@@ -77,6 +78,8 @@ export function AssetSourceDialog({
   title?: string;
   /** Runs after a successful upload/import, before the dialog closes. */
   onImported?: () => void | Promise<void>;
+  /** Custom trigger element; falls back to a labelled button when omitted. */
+  trigger?: React.ReactNode;
 }) {
   const [open, setOpen] = React.useState(false);
 
@@ -88,9 +91,11 @@ export function AssetSourceDialog({
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
-        <Button variant={triggerVariant} size={triggerSize}>
-          <ImagePlus className="size-4" /> {triggerLabel}
-        </Button>
+        {trigger ?? (
+          <Button variant={triggerVariant} size={triggerSize}>
+            <ImagePlus className="size-4" /> {triggerLabel}
+          </Button>
+        )}
       </DialogTrigger>
       <DialogContent className="w-[min(94vw,44rem)]">
         <DialogHeader>
