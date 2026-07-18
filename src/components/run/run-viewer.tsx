@@ -8,6 +8,7 @@ import {
   TriangleAlert,
   CircleCheck,
   RotateCcw,
+  Square,
   LoaderCircle,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
@@ -16,7 +17,7 @@ import { Markdown } from "@/components/markdown";
 import { Button } from "@/components/ui/ui-button";
 import { RunStatusBadge } from "@/components/run/run-status-badge";
 import { Lightbox } from "@/components/run/image-lightbox";
-import { triggerRun } from "@/lib/actions/task-actions";
+import { triggerRun, stopRun } from "@/lib/actions/task-actions";
 
 interface RunEvent {
   seq: number;
@@ -62,6 +63,7 @@ export function RunViewer({
   initialMeta?: RunMeta;
 }) {
   const [retrying, startRetry] = React.useTransition();
+  const [stopping, startStop] = React.useTransition();
   const [status, setStatus] = React.useState(initialStatus);
   const [events, setEvents] = React.useState<RunEvent[]>(initialEvents);
   const [artifacts, setArtifacts] = React.useState<Artifact[]>(
@@ -78,7 +80,9 @@ export function RunViewer({
   const [lightboxIndex, setLightboxIndex] = React.useState<number | null>(null);
 
   const isLive = status === "QUEUED" || status === "RUNNING";
-  const canRetry = status === "FAILED" || status === "CANCELLED";
+  // Re-run is available for any finished run — including a DONE run that
+  // produced no PNGs (the agent sometimes reports success without rendering).
+  const canRerun = !isLive;
 
   React.useEffect(() => {
     if (!isLive) return;
@@ -141,19 +145,36 @@ export function RunViewer({
                 {meta.costUsd ? ` · $${meta.costUsd.toFixed(4)}` : ""}
               </span>
             ) : null}
-            {canRetry ? (
+            {isLive ? (
+              <Button
+                size="sm"
+                variant="danger"
+                disabled={stopping}
+                onClick={() => startStop(() => stopRun(runId))}
+                title="Stop this run"
+              >
+                {stopping ? (
+                  <LoaderCircle className="size-4 animate-spin" />
+                ) : (
+                  <Square className="size-4" />
+                )}
+                Stop
+              </Button>
+            ) : null}
+            {canRerun ? (
               <Button
                 size="sm"
                 variant="secondary"
                 disabled={retrying}
                 onClick={() => startRetry(() => triggerRun(taskId))}
+                title="Run this task again"
               >
                 {retrying ? (
                   <LoaderCircle className="size-4 animate-spin" />
                 ) : (
                   <RotateCcw className="size-4" />
                 )}
-                Retry
+                {status === "DONE" ? "Re-run" : "Retry"}
               </Button>
             ) : null}
             <RunStatusBadge status={status} />

@@ -1,5 +1,8 @@
+import os from "node:os";
 import path from "node:path";
 import fs from "node:fs/promises";
+import { randomUUID } from "node:crypto";
+import { pathToFileURL } from "node:url";
 import { chromium, type Browser } from "playwright";
 
 // Reuse one browser across renders in a run (and across runs). Lazily launched.
@@ -50,8 +53,11 @@ export async function renderHtmlToPng(opts: {
     ? opts.filename
     : `${opts.filename}.png`;
   const absPath = path.join(outDir, filename);
-  const base = filename.replace(/\.png$/i, "");
-  const tmpHtml = path.join(outDir, `.render-${base}.html`);
+  // Keep the temp HTML in a clean OS temp dir — the output folder name can carry
+  // "?", "|", ":" etc. (from task titles) which break file:// URL loading. The
+  // HTML references photos/fonts via absolute file:// URLs, so its own location
+  // doesn't matter for asset resolution.
+  const tmpHtml = path.join(os.tmpdir(), `retroz-render-${randomUUID()}.html`);
 
   await fs.mkdir(outDir, { recursive: true });
   // Load via file:// so local font/photo file:// URLs resolve with an origin.
@@ -64,7 +70,7 @@ export async function renderHtmlToPng(opts: {
   });
   const page = await context.newPage();
   try {
-    await page.goto(`file://${tmpHtml}`, { waitUntil: "networkidle" });
+    await page.goto(pathToFileURL(tmpHtml).href, { waitUntil: "networkidle" });
     await page.evaluate(() =>
       "fonts" in document ? (document as Document).fonts.ready : null,
     );

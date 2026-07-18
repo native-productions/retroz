@@ -17,7 +17,6 @@ export async function updateSettings(input: unknown) {
   await db.appSetting.update({
     where: { id: "singleton" },
     data: {
-      provider: data.provider,
       defaultModel: data.defaultModel,
       claudeAuthMode: data.claudeAuthMode,
       codexModel: data.codexModel,

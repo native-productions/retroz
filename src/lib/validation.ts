@@ -123,7 +123,6 @@ export const skillUpsertSchema = z.object({
 });
 
 export const settingsUpdateSchema = z.object({
-  provider: z.enum(["CLAUDE", "CODEX"]),
   defaultModel: z.string().min(1),
   claudeAuthMode: z.enum(["SUBSCRIPTION", "API_KEY"]),
   codexModel: z.string().min(1),

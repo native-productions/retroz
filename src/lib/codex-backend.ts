@@ -45,7 +45,9 @@ export async function runCodexAgent(input: CodexRunInput): Promise<AgentRunResul
   let numTurns = 0;
   let error: string | null = null;
 
-  const { events } = await thread.runStreamed(input.prompt);
+  const { events } = await thread.runStreamed(input.prompt, {
+    signal: input.abortController.signal,
+  });
   for await (const event of events) {
     switch (event.type) {
       case "thread.started":

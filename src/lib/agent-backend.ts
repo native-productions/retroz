@@ -18,6 +18,8 @@ export interface AgentRunInput {
   toolContext: unknown;
   /** Built-in tools to allow (Read/Write/Glob/Grep/Bash). */
   baseTools?: string[];
+  /** Aborts the agent run when the user stops it. */
+  abortController: AbortController;
   record: RecordEvent;
   /** Persist the engine session id (Claude session / Codex thread) once known. */
   onSessionId: (sessionId: string) => Promise<void>;

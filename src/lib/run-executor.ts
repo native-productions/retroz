@@ -1,8 +1,8 @@
 import path from "node:path";
 import fs from "node:fs/promises";
 import { db } from "@/lib/db-client";
-import { DATA_ROOT, toRelative, runFolderStamp } from "@/lib/paths";
-import { resolveModel } from "@/lib/models";
+import { DATA_ROOT, toRelative, runFolderStamp, safeSegment } from "@/lib/paths";
+import { resolveProviderModel } from "@/lib/models";
 import { buildFontFaceCss } from "@/lib/font-css";
 import { buildRunPrompt } from "@/lib/prompt-builder";
 import { rankAssets } from "@/lib/asset-ranker";
@@ -14,6 +14,10 @@ import {
   type RunToolContext,
 } from "@/lib/run-tools";
 import type { ToolDef } from "@/lib/run-tools";
+import {
+  registerRunController,
+  releaseRunController,
+} from "@/lib/run-control";
 import { runClaudeAgent } from "@/lib/claude-backend";
 import { runCodexAgent } from "@/lib/codex-backend";
 import type { RunEventType } from "@/generated/prisma/enums";
@@ -36,6 +40,8 @@ export async function executeRun(taskRunId: string): Promise<void> {
     },
   });
   if (!run) return;
+  // Cancelled while still queued — skip execution entirely.
+  if (run.status === "CANCELLED") return;
 
   const { task } = run;
   const settings = await db.appSetting.upsert({
@@ -44,18 +50,18 @@ export async function executeRun(taskRunId: string): Promise<void> {
     create: { id: "singleton" },
   });
 
-  // A task may pin its engine (campaign tasks do); else use the global setting.
-  const provider = task.provider ?? settings.provider;
-  const model = resolveModel(provider, [
-    run.model,
-    task.model,
-    task.workflow.defaultModel,
-    provider === "CODEX" ? settings.codexModel : settings.defaultModel,
-  ]);
+  // Engine is model-driven (no global provider toggle). A campaign task pins its
+  // provider; otherwise the first chosen model decides, falling back to Claude.
+  const { provider, model } = resolveProviderModel({
+    pinnedProvider: task.provider,
+    candidates: [run.model, task.model, task.workflow.defaultModel],
+    claudeDefault: settings.defaultModel,
+    codexDefault: settings.codexModel,
+  });
 
   // --- output folder: data/tasks/<workflow>/<Task Name | YYYY-MM-DD HH:mm> ---
   const stamp = runFolderStamp(new Date());
-  const runFolderName = `${task.name} | ${stamp}`;
+  const runFolderName = safeSegment(`${task.name} | ${stamp}`);
   const outDirAbs = path.join(
     DATA_ROOT,
     "tasks",
@@ -225,6 +231,10 @@ export async function executeRun(taskRunId: string): Promise<void> {
   const additionalDirectories = [assetDirAbs, globalDirAbs].filter(
     (d): d is string => Boolean(d),
   );
+  // Per-run abort so a stop action can cancel the agent mid-flight.
+  const abortController = new AbortController();
+  registerRunController(taskRunId, abortController);
+
   const shared = {
     prompt,
     model,
@@ -232,6 +242,7 @@ export async function executeRun(taskRunId: string): Promise<void> {
     additionalDirectories,
     tools: RUN_TOOLS as unknown as ToolDef<unknown>[],
     toolContext,
+    abortController,
     record,
     onSessionId,
   };
@@ -253,10 +264,17 @@ export async function executeRun(taskRunId: string): Promise<void> {
             stripApiKey: settings.claudeAuthMode === "SUBSCRIPTION",
           });
 
+    // A user stop wins over whatever the backend reports.
+    const finalStatus = abortController.signal.aborted
+      ? "CANCELLED"
+      : result.ok
+        ? "DONE"
+        : "FAILED";
+
     await db.taskRun.update({
       where: { id: taskRunId },
       data: {
-        status: result.ok ? "DONE" : "FAILED",
+        status: finalStatus,
         finishedAt: new Date(),
         tokensIn: result.tokensIn,
         tokensOut: result.tokensOut,
@@ -271,7 +289,7 @@ export async function executeRun(taskRunId: string): Promise<void> {
       },
     });
     await record("STATUS", {
-      status: result.ok ? "DONE" : "FAILED",
+      status: finalStatus,
       tokensIn: result.tokensIn,
       tokensOut: result.tokensOut,
       cacheCreationTokens: result.cacheCreationTokens,
@@ -279,14 +297,24 @@ export async function executeRun(taskRunId: string): Promise<void> {
       costUsd: result.costUsd,
     });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    await db.taskRun.update({
-      where: { id: taskRunId },
-      data: { status: "FAILED", finishedAt: new Date(), error: msg },
-    });
-    await record("ERROR", { message: msg });
-    await record("STATUS", { status: "FAILED" });
+    // An abort surfaces as a thrown error in the backend — treat it as a cancel.
+    if (abortController.signal.aborted) {
+      await db.taskRun.update({
+        where: { id: taskRunId },
+        data: { status: "CANCELLED", finishedAt: new Date() },
+      });
+      await record("STATUS", { status: "CANCELLED" });
+    } else {
+      const msg = err instanceof Error ? err.message : String(err);
+      await db.taskRun.update({
+        where: { id: taskRunId },
+        data: { status: "FAILED", finishedAt: new Date(), error: msg },
+      });
+      await record("ERROR", { message: msg });
+      await record("STATUS", { status: "FAILED" });
+    }
   } finally {
+    releaseRunController(taskRunId);
     if (mcpToken) releaseRunToolContext(mcpToken);
   }
 }

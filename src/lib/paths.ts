@@ -34,6 +34,25 @@ export function slugify(input: string): string {
     .slice(0, 64) || "item";
 }
 
+/**
+ * Make a string safe to use as a single path segment: strips filesystem- and
+ * file://-URL-hostile characters (raw task titles otherwise carry "?", "|", ":"
+ * which break the renderer's file:// loading and are cross-platform unsafe).
+ * Readable non-ASCII (·, —) is kept.
+ */
+export function safeSegment(input: string): string {
+  return (
+    input
+      .replace(/[/\\<>"]/g, "")
+      .replace(/[?%*#]/g, "")
+      .replace(/\|/g, "-")
+      .replace(/:/g, ".")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, 120) || "run"
+  );
+}
+
 /** Timestamp folder label: "YYYY-MM-DD HH:mm" (local). */
 export function runFolderStamp(d: Date): string {
   const pad = (n: number) => String(n).padStart(2, "0");

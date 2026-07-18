@@ -9,6 +9,7 @@ import { toAbsolute, slugify } from "@/lib/paths";
 import { providerOfModel } from "@/lib/models";
 import { enqueuePlannerRun } from "@/lib/run-queue";
 import { campaignDir } from "@/lib/planner-executor";
+import { removeTaskOutputs } from "@/lib/task-outputs";
 import { zonedInstant } from "@/lib/campaign-time";
 import {
   campaignCreateSchema,
@@ -128,6 +129,7 @@ export async function deleteCampaignItem(id: string) {
   const item = await db.campaignItem.delete({ where: { id } });
   // Keep the workflow in sync: drop the backing task too (if it was materialized).
   if (item.taskId) {
+    await removeTaskOutputs([item.taskId]);
     const task = await db.task
       .delete({ where: { id: item.taskId } })
       .catch(() => null);
@@ -284,6 +286,7 @@ export async function deleteCampaign(id: string) {
     .map((i) => i.taskId)
     .filter((t): t is string => Boolean(t));
   if (taskIds.length > 0) {
+    await removeTaskOutputs(taskIds);
     await db.task.deleteMany({ where: { id: { in: taskIds } } });
   }
 

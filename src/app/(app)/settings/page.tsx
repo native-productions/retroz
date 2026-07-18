@@ -22,7 +22,6 @@ export default async function SettingsPage() {
       <PageBody>
         <SettingsForm
           initial={{
-            provider: settings.provider,
             defaultModel: settings.defaultModel,
             claudeAuthMode: settings.claudeAuthMode,
             codexModel: settings.codexModel,

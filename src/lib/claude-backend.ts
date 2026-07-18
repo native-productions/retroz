@@ -46,6 +46,7 @@ export async function runClaudeAgent(input: ClaudeRunInput): Promise<AgentRunRes
       permissionMode: "bypassPermissions",
       allowDangerouslySkipPermissions: true,
       allowedTools,
+      abortController: input.abortController,
       mcpServers: { retroz: mcpServer },
       includePartialMessages: false,
       env,

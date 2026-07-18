@@ -2,7 +2,7 @@ import path from "node:path";
 import fs from "node:fs/promises";
 import { db } from "@/lib/db-client";
 import { DATA_ROOT, toAbsolute } from "@/lib/paths";
-import { resolveModel } from "@/lib/models";
+import { resolveProviderModel } from "@/lib/models";
 import { emitRunEvent, type RunBusEvent } from "@/lib/run-bus";
 import {
   registerToolContext,
@@ -43,13 +43,12 @@ export async function executePlannerRun(planRunId: string): Promise<void> {
     create: { id: "singleton" },
   });
 
-  const provider = campaign.provider ?? settings.provider;
-  const model = resolveModel(provider, [
-    planRun.model,
-    campaign.model,
-    campaign.workflow.defaultModel,
-    provider === "CODEX" ? settings.codexModel : settings.defaultModel,
-  ]);
+  const { provider, model } = resolveProviderModel({
+    pinnedProvider: campaign.provider,
+    candidates: [planRun.model, campaign.model, campaign.workflow.defaultModel],
+    claudeDefault: settings.defaultModel,
+    codexDefault: settings.codexModel,
+  });
 
   const cwd = campaignDir(campaign.id);
   await fs.mkdir(cwd, { recursive: true });
@@ -129,6 +128,7 @@ export async function executePlannerRun(planRunId: string): Promise<void> {
     additionalDirectories: [cwd],
     tools: PLANNER_TOOLS as unknown as ToolDef<unknown>[],
     toolContext,
+    abortController: new AbortController(),
     record,
     onSessionId,
   };

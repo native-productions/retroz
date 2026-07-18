@@ -66,6 +66,33 @@ export function modelLabel(value?: string | null): string {
 }
 
 /**
+ * Resolve which engine + model a run uses. There is no global provider toggle:
+ * the engine is derived from the chosen model (a Codex model → Codex, etc.).
+ * A pinned provider (campaign/task override) wins; otherwise the first candidate
+ * model that maps to a catalog decides; failing everything, Claude is the default.
+ */
+export function resolveProviderModel(input: {
+  pinnedProvider?: AgentProvider | null;
+  candidates: Array<string | null | undefined>;
+  claudeDefault: string;
+  codexDefault: string;
+}): { provider: AgentProvider; model: string } {
+  const { pinnedProvider, candidates, claudeDefault, codexDefault } = input;
+  if (pinnedProvider) {
+    const model = resolveModel(pinnedProvider, [
+      ...candidates,
+      pinnedProvider === "CODEX" ? codexDefault : claudeDefault,
+    ]);
+    return { provider: pinnedProvider, model };
+  }
+  for (const c of candidates) {
+    const p = providerOfModel(c);
+    if (p) return { provider: p, model: c as string };
+  }
+  return { provider: "CLAUDE", model: claudeDefault };
+}
+
+/**
  * Pick the first candidate that belongs to the provider's catalog, else the
  * provider default. Lets a task keep e.g. a Claude override without breaking
  * runs when the app is switched to Codex.
