@@ -169,6 +169,19 @@ These fonts are pre-loaded — just use them in CSS via font-family; do NOT
 that fit the mood of the content and the workflow instruction.
 ${fontList}${pairingList}
 ${skillsBlock}
+=== CONTENT-ONLY RULE (important) ===
+The image shows ONLY audience-facing content. Never render production or campaign
+metadata onto the image, including:
+  - day / slot counters ("Day 1", "Day 1/7", "1 of 7", "Part 3"),
+  - series or campaign labels (the campaign name, "a 7-day series", topic-plus-day
+    tags like "SOFTWARE DEVELOPMENT — Day 1/7"),
+  - angle / format labels ("HOOK", "TIP", "CTA", "OUTRO"),
+  - meta CTAs about the series ("save this series", "follow for day 2").
+If the task instruction contains any such scaffolding, treat it as internal
+guidance and keep it OFF the image — render the content message itself. The only
+exception is when the instruction EXPLICITLY asks for visible numbering or series
+branding as a deliberate design element.
+
 === HOW TO WORK ===
 1. Inspect the source photos (use the ${provider === "CODEX" ? "view_image" : "Read"} tool on their paths) so overlays fit
    the actual composition.

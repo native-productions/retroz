@@ -136,6 +136,20 @@ export function buildPlannerPrompt(input: PlannerPromptInput): string {
     "   body lines that deliver the idea, one clear CTA, then 3–8 relevant hashtags.",
     "The overlay is not the caption — do not just repeat the headline in the caption.",
     "",
+    "## Overlay copy is CONTENT ONLY (critical)",
+    "The overlay is what the audience sees on the image. It must contain ONLY the",
+    "content message itself — never the campaign scaffolding you used to plan it.",
+    "Do NOT put any of the following in `instruction`/overlay text:",
+    '  - day or slot counters ("Day 1", "Day 1/7", "1 of 7", "Part 3"),',
+    '  - series or campaign labels (the campaign name, "a 7-day series",',
+    '    topic-plus-day tags like "SOFTWARE DEVELOPMENT — Day 1/7"),',
+    '  - angle / format labels ("HOOK", "TIP", "CTA", "OUTRO"),',
+    '  - meta CTAs about the series ("save this series", "follow for day 2").',
+    "These live in the internal `angle` field — they guide YOU, not the reader.",
+    "Write each overlay as a standalone post. A save/follow CTA, if it fits, belongs",
+    "in the `caption`, never on the image — unless the brief EXPLICITLY asks for",
+    "visible day numbering or series branding as a deliberate design choice.",
+    "",
   );
 
   if (scope === "reroll" && targetItem) {
@@ -163,7 +177,8 @@ export function buildPlannerPrompt(input: PlannerPromptInput): string {
     lines.push(
       "## Task: plan the full campaign",
       "1. Break the brief into DISTINCT daily content — each day (and each slot within a day) is a",
-      "   different angle, never a repeat. Day 1 hooks, later days build/vary the theme.",
+      "   different angle, never a repeat. The opening post hooks; later posts build or vary the",
+      "   theme. This ordering is internal planning — never label the day/sequence on the image.",
       "2. Span at most 7 days. You may place multiple slots on the same day (slotIndex 0,1,...).",
       "3. For each post write a concrete `instruction` a rendering agent can execute verbatim: the",
       "   OVERLAY copy (exact words to render), layout intent, mood, and which photo (by request",
