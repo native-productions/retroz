@@ -1,7 +1,7 @@
 import path from "node:path";
-import fs from "node:fs/promises";
 import { db } from "@/lib/db-client";
-import { DATA_ROOT, toAbsolute } from "@/lib/paths";
+import { DATA_ROOT, toRelative } from "@/lib/paths";
+import { openRunWorkspace } from "@/lib/run-workspace";
 import { resolveProviderModel } from "@/lib/models";
 import { emitRunEvent, type RunBusEvent } from "@/lib/run-bus";
 import {
@@ -15,9 +15,12 @@ import { runClaudeAgent } from "@/lib/claude-backend";
 import { runCodexAgent } from "@/lib/codex-backend";
 import type { RunEventType } from "@/generated/prisma/enums";
 
-/** Scratch dir the planner agent runs in (also where a brief file lives). */
-export function campaignDir(campaignId: string): string {
-  return path.join(DATA_ROOT, "campaigns", campaignId);
+/**
+ * Storage key prefix for a campaign's working folder: the planner agent's
+ * scratch space, and where an uploaded brief file lives.
+ */
+export function campaignPrefix(campaignId: string): string {
+  return toRelative(path.join(DATA_ROOT, "campaigns", campaignId));
 }
 
 /** Execute one queued CampaignPlanRun end-to-end. Persists events; writes the
@@ -50,8 +53,11 @@ export async function executePlannerRun(planRunId: string): Promise<void> {
     codexDefault: settings.codexModel,
   });
 
-  const cwd = campaignDir(campaign.id);
-  await fs.mkdir(cwd, { recursive: true });
+  // The planner reads an uploaded brief off disk, so the campaign folder is
+  // staged locally the same way a render run stages its assets. On the local
+  // driver this resolves to data/campaigns/<id> with no copying.
+  const workspace = await openRunWorkspace(planRunId, campaignPrefix(campaign.id));
+  const cwd = workspace.outDirAbs;
 
   // --- event recorder (persist + live tap), keyed by the plan run id ---
   let seq = 0;
@@ -88,7 +94,11 @@ export async function executePlannerRun(planRunId: string): Promise<void> {
     campaignName: campaign.name,
     format: campaign.format as "SINGLE" | "CAROUSEL",
     briefText: campaign.brief,
-    briefFileAbs: campaign.briefRelPath ? toAbsolute(campaign.briefRelPath) : null,
+    // Hydrated alongside the rest of the campaign folder, so it is addressed
+    // inside the workspace rather than at its stored key.
+    briefFileAbs: campaign.briefRelPath
+      ? path.join(cwd, path.basename(campaign.briefRelPath))
+      : null,
     scope: planRun.scope as "full" | "reroll" | "add",
     existingItems: campaign.items.map((i) => ({
       dayIndex: i.dayIndex,
@@ -195,5 +205,7 @@ export async function executePlannerRun(planRunId: string): Promise<void> {
     await record("STATUS", { status: "FAILED" });
   } finally {
     if (mcpToken) releaseToolContext(mcpToken);
+    // Keep whatever the planner left in its folder, then drop the scratch.
+    await workspace.close().catch(() => {});
   }
 }

@@ -1,9 +1,8 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import fs from "node:fs/promises";
 import { db } from "@/lib/db-client";
-import { toAbsolute } from "@/lib/paths";
+import { storage } from "@/lib/storage";
 import { globalAssetUpdateSchema } from "@/lib/validation";
 
 export async function updateGlobalAsset(input: unknown) {
@@ -15,6 +14,6 @@ export async function updateGlobalAsset(input: unknown) {
 
 export async function deleteGlobalAsset(id: string) {
   const asset = await db.workflowAsset.delete({ where: { id } });
-  await fs.rm(toAbsolute(asset.relPath), { force: true });
+  await storage.delete(asset.relPath);
   revalidatePath(`/workflows/${asset.workflowId}`);
 }

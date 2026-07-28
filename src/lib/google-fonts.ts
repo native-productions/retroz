@@ -1,5 +1,5 @@
-import fs from "node:fs/promises";
 import path from "node:path";
+import { storage } from "@/lib/storage";
 
 const BROWSER_UA =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36";
@@ -152,11 +152,10 @@ export interface GoogleFontResult {
   }[];
 }
 
-/** Fetch a Google font's woff2 files into destAbsDir. Returns stored variants. */
+/** Fetch a Google font's woff2 files into destRelDir. Returns stored variants. */
 export async function fetchGoogleFont(
   familyInput: string,
   slug: string,
-  destAbsDir: string,
   destRelDir: string,
 ): Promise<GoogleFontResult> {
   const family = resolveFamily(familyInput);
@@ -184,7 +183,7 @@ export async function fetchGoogleFont(
     }
   }
 
-  await fs.mkdir(destAbsDir, { recursive: true });
+  await storage.ensurePrefix(destRelDir);
   const variants: GoogleFontResult["variants"] = [];
   for (const v of byKey.values()) {
     const res = await fetch(v.url, { headers: { "User-Agent": BROWSER_UA } });
@@ -192,7 +191,7 @@ export async function fetchGoogleFont(
     const buf = Buffer.from(await res.arrayBuffer());
     const suffix = v.weightRange ? "var" : String(v.weight);
     const filename = `${slug}-${suffix}${v.style === "italic" ? "i" : ""}.woff2`;
-    await fs.writeFile(path.join(destAbsDir, filename), buf);
+    await storage.put(path.join(destRelDir, filename), buf);
     variants.push({
       weight: v.weight,
       weightRange: v.weightRange,

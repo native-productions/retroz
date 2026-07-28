@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { db } from "@/lib/db-client";
-import { toRelative } from "@/lib/paths";
+import { storage } from "@/lib/storage";
 import { renderHtmlToPng } from "@/lib/png-compositor";
 import { rankAssets } from "@/lib/asset-ranker";
 import type { RunEventType } from "@/generated/prisma/enums";
@@ -21,7 +21,10 @@ export interface RunToolAsset {
 /** Everything a tool needs about the run it belongs to. */
 export interface RunToolContext {
   taskRunId: string;
+  /** Local directory the agent renders into. */
   outDirAbs: string;
+  /** Storage key prefix those outputs are persisted under. */
+  outPrefix: string;
   fontFaceCss: string;
   assets: RunToolAsset[];
   record: (type: RunEventType, payload: unknown) => Promise<void>;
@@ -101,7 +104,10 @@ export const RUN_TOOLS: RunToolDef[] = [
           height: args.height,
           fontFaceCss: ctx.fontFaceCss,
         });
-        const relPath = toRelative(res.absPath);
+        // Persist immediately rather than syncing at the end of the run, so the
+        // run viewer can show each image the moment it is produced.
+        const relPath = `${ctx.outPrefix}/${res.filename}`;
+        await storage.put(relPath, res.buffer, { contentType: "image/png" });
         await db.runArtifact.create({
           data: {
             taskRunId: ctx.taskRunId,

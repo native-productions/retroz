@@ -1,7 +1,7 @@
-import fs from "node:fs/promises";
 import path from "node:path";
 import sharp from "sharp";
-import { toAbsolute, slugify } from "@/lib/paths";
+import { slugify } from "@/lib/paths";
+import { storage } from "@/lib/storage";
 
 /** Image mime types accepted by every asset intake path (upload + Pexels). */
 export const ALLOWED_IMAGE_MIME = new Set([
@@ -29,8 +29,7 @@ export async function storeImage(
   relDir: string,
   input: { buf: Buffer; mimeType: string; name: string },
 ): Promise<StoredImage> {
-  const destDir = toAbsolute(relDir);
-  await fs.mkdir(destDir, { recursive: true });
+  await storage.ensurePrefix(relDir);
 
   const ext =
     path.extname(input.name) || `.${input.mimeType.split("/")[1] ?? "jpg"}`;
@@ -39,15 +38,12 @@ export async function storeImage(
 
   let filename = `${base}${ext}`;
   let i = 1;
-  while (
-    await fs
-      .access(path.join(destDir, filename))
-      .then(() => true)
-      .catch(() => false)
-  ) {
+  while (await storage.exists(path.join(relDir, filename))) {
     filename = `${base}-${i++}${ext}`;
   }
-  await fs.writeFile(path.join(destDir, filename), input.buf);
+  await storage.put(path.join(relDir, filename), input.buf, {
+    contentType: input.mimeType,
+  });
 
   let width: number | null = null;
   let height: number | null = null;

@@ -1,10 +1,9 @@
 import { NextResponse } from "next/server";
-import fs from "node:fs/promises";
 import path from "node:path";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db-client";
-import { toRelative } from "@/lib/paths";
-import { campaignDir } from "@/lib/planner-executor";
+import { storage } from "@/lib/storage";
+import { campaignPrefix } from "@/lib/planner-executor";
 
 export const runtime = "nodejs";
 
@@ -40,20 +39,19 @@ export async function POST(req: Request) {
   }
 
   const buf = Buffer.from(await file.arrayBuffer());
-  const destDir = campaignDir(campaignId);
-  await fs.mkdir(destDir, { recursive: true });
-  const filename = `brief${ext}`;
-  const absPath = path.join(destDir, filename);
-  await fs.writeFile(absPath, buf);
+  const relDir = campaignPrefix(campaignId);
+  const briefRelPath = path.join(relDir, `brief${ext}`);
+  await storage.ensurePrefix(relDir);
+  await storage.put(briefRelPath, buf);
 
   const isText = ext === ".txt" || ext === ".md" || ext === ".markdown";
   await db.campaign.update({
     where: { id: campaignId },
     data: {
-      briefRelPath: toRelative(absPath),
+      briefRelPath,
       ...(isText ? { brief: buf.toString("utf8").slice(0, 20000) } : {}),
     },
   });
 
-  return NextResponse.json({ ok: true, briefRelPath: toRelative(absPath) });
+  return NextResponse.json({ ok: true, briefRelPath });
 }

@@ -1,7 +1,7 @@
 import path from "node:path";
-import fs from "node:fs/promises";
 import { db } from "@/lib/db-client";
-import { DATA_ROOT, toRelative, runFolderStamp, safeSegment } from "@/lib/paths";
+import { DATA_ROOT, toRelative, runFolderSlug } from "@/lib/paths";
+import { openRunWorkspace } from "@/lib/run-workspace";
 import { resolveProviderModel } from "@/lib/models";
 import { buildFontFaceCss } from "@/lib/font-css";
 import { buildRunPrompt } from "@/lib/prompt-builder";
@@ -59,24 +59,26 @@ export async function executeRun(taskRunId: string): Promise<void> {
     codexDefault: settings.codexModel,
   });
 
-  // --- output folder: data/tasks/<workflow>/<Task Name | YYYY-MM-DD HH:mm> ---
-  const stamp = runFolderStamp(new Date());
-  const runFolderName = safeSegment(`${task.name} | ${stamp}`);
-  const outDirAbs = path.join(
-    DATA_ROOT,
-    "tasks",
-    task.workflow.slug,
-    runFolderName,
+  // --- output prefix: data/tasks/<workflow>/<task-name>-<YYYY-MM-DD>-<HHmm> ---
+  const tasksPrefix = toRelative(
+    path.join(DATA_ROOT, "tasks", task.workflow.slug),
   );
-  await fs.mkdir(outDirAbs, { recursive: true });
-  const outputRelPath = toRelative(outDirAbs);
+  const outputRelPath = await uniqueRunPrefix(
+    `${tasksPrefix}/${runFolderSlug(task.name, new Date())}`,
+  );
+
+  // Inputs live in the blob store, but the agent reads photos off disk and the
+  // renderer loads its page over file://. Stage everything this run needs into
+  // one local workspace; on the local driver this resolves to data/ directly.
+  const workspace = await openRunWorkspace(taskRunId, outputRelPath);
+  const outDirAbs = workspace.outDirAbs;
 
   const assetDirAbs = task.assetFolder
-    ? path.resolve(process.cwd(), task.assetFolder.relPath)
+    ? await workspace.dir(task.assetFolder.relPath, "assets")
     : null;
   const assets = (task.assetFolder?.assets ?? []).map((a) => ({
     filename: a.filename,
-    absPath: path.resolve(process.cwd(), a.relPath),
+    absPath: path.join(assetDirAbs ?? "", a.filename),
     width: a.width,
     height: a.height,
     description: a.description,
@@ -101,16 +103,19 @@ export async function executeRun(taskRunId: string): Promise<void> {
     where: { workflowId: task.workflowId },
     orderBy: { createdAt: "asc" },
   });
+  const globalDirAbs =
+    globalAssetRows.length > 0
+      ? await workspace.dir(
+          toRelative(path.join(DATA_ROOT, "assets", task.workflow.slug, "_global")),
+          "global",
+        )
+      : null;
   const globalAssets = globalAssetRows.map((a) => ({
     filename: a.filename,
-    absPath: path.resolve(process.cwd(), a.relPath),
+    absPath: path.join(globalDirAbs ?? "", a.filename),
     kind: a.kind,
     description: a.description,
   }));
-  const globalDirAbs =
-    globalAssets.length > 0
-      ? path.join(DATA_ROOT, "assets", task.workflow.slug, "_global")
-      : null;
 
   // --- fonts available to this run: workflow-assigned, else whole enabled bank ---
   const assigned = await db.workflowFont.findMany({
@@ -137,6 +142,11 @@ export async function executeRun(taskRunId: string): Promise<void> {
       moodTags: p.moodTags,
     }));
 
+  // The renderer loads font files over file://, so they have to be on disk too.
+  const fontPaths = await workspace.files(
+    fonts.flatMap((f) => f.variants.map((v) => v.relPath)),
+    "fonts",
+  );
   const fontFaceCss = buildFontFaceCss(
     fonts.map((f) => ({
       family: f.family,
@@ -147,6 +157,7 @@ export async function executeRun(taskRunId: string): Promise<void> {
         relPath: v.relPath,
       })),
     })),
+    (relPath) => fontPaths.get(relPath) ?? relPath,
   );
   const fontsForPrompt = fonts.map((f) => ({
     family: f.family,
@@ -216,6 +227,7 @@ export async function executeRun(taskRunId: string): Promise<void> {
   const toolContext: RunToolContext = {
     taskRunId,
     outDirAbs,
+    outPrefix: outputRelPath,
     fontFaceCss,
     assets,
     record,
@@ -316,5 +328,26 @@ export async function executeRun(taskRunId: string): Promise<void> {
   } finally {
     releaseRunController(taskRunId);
     if (mcpToken) releaseRunToolContext(mcpToken);
+    // Rendered PNGs are already stored by the render tool; this captures the
+    // HTML sources and anything else the agent wrote, then drops the scratch.
+    await workspace.close().catch(() => {});
   }
+}
+
+/**
+ * Runs are keyed by task name plus minute, so two runs of the same task inside
+ * one minute would otherwise share an output folder. Suffix until free.
+ */
+async function uniqueRunPrefix(base: string): Promise<string> {
+  let candidate = base;
+  let n = 1;
+  while (
+    await db.taskRun.findFirst({
+      where: { outputRelPath: candidate },
+      select: { id: true },
+    })
+  ) {
+    candidate = `${base}-${++n}`;
+  }
+  return candidate;
 }

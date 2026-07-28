@@ -41,7 +41,7 @@ export function WorkflowTabs({
   };
 }) {
   const router = useRouter();
-  const pathname = usePathname();
+  const pathname = usePathname(); 
   const searchParams = useSearchParams();
 
   const param = searchParams.get("tab");

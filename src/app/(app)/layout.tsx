@@ -10,10 +10,14 @@ export default async function AppLayout({
   const session = await auth();
   if (!session?.user) redirect("/login");
 
+  // The shell owns the viewport: only the content column scrolls, so the
+  // sidebar stays put and the grid background never drifts.
   return (
-    <div className="flex flex-1 min-h-screen">
+    <div className="flex h-dvh overflow-hidden">
       <AppSidebar userName={session.user.name ?? session.user.email} />
-      <div className="flex-1 min-w-0 flex flex-col">{children}</div>
+      <main className="flex min-w-0 flex-1 flex-col overflow-y-auto">
+        {children}
+      </main>
     </div>
   );
 }

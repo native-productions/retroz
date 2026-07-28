@@ -1,5 +1,4 @@
 import path from "node:path";
-import fs from "node:fs/promises";
 
 /** Absolute project root. */
 export const PROJECT_ROOT = process.cwd();
@@ -20,43 +19,45 @@ export function toRelative(absPath: string): string {
   return path.relative(PROJECT_ROOT, absPath);
 }
 
-export async function ensureDir(absPath: string): Promise<void> {
-  await fs.mkdir(absPath, { recursive: true });
-}
-
-/** kebab-case a name for use in slugs / folder names. */
-export function slugify(input: string): string {
-  return input
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 64) || "item";
-}
+/**
+ * Longest name portion kept in a run folder slug, before the timestamp. Task
+ * names carry a lot of prefix ("Software Development · D3 S1 · …"), so this is
+ * generous — with the timestamp it stays well inside the 255-byte path segment
+ * limit and nowhere near S3's 1024-byte key limit.
+ */
+const RUN_SLUG_NAME_MAX = 110;
 
 /**
- * Make a string safe to use as a single path segment: strips filesystem- and
- * file://-URL-hostile characters (raw task titles otherwise carry "?", "|", ":"
- * which break the renderer's file:// loading and are cross-platform unsafe).
- * Readable non-ASCII (·, —) is kept.
+ * kebab-case a name for use in slugs / folder names. Accents are folded to
+ * their base letter ("Café" → "cafe") so words survive intact; everything else
+ * outside [a-z0-9], including typographic punctuation (·, —), collapses to a
+ * single dash.
  */
-export function safeSegment(input: string): string {
+export function slugify(input: string, maxLength = 64): string {
   return (
     input
-      .replace(/[/\\<>"]/g, "")
-      .replace(/[?%*#]/g, "")
-      .replace(/\|/g, "-")
-      .replace(/:/g, ".")
-      .replace(/\s+/g, " ")
+      .normalize("NFD")
+      .replace(/\p{Diacritic}/gu, "")
+      .toLowerCase()
       .trim()
-      .slice(0, 120) || "run"
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, maxLength)
+      // Slicing can land mid-word and leave a dangling separator.
+      .replace(/-+$/, "") || "item"
   );
 }
 
-/** Timestamp folder label: "YYYY-MM-DD HH:mm" (local). */
-export function runFolderStamp(d: Date): string {
+/**
+ * Folder name for one run's outputs: "<task-name>-<YYYY-MM-DD>-<HHmm>", local
+ * time. Fully slug-style — lowercase, dash-separated, no spaces or punctuation
+ * — so output paths stay easy to scan, quote, and use in a URL. The timestamp
+ * keeps runs of the same task ordered and distinct.
+ */
+export function runFolderSlug(name: string, d: Date): string {
   const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(
-    d.getHours(),
-  )}:${pad(d.getMinutes())}`;
+  const stamp =
+    `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
+    `-${pad(d.getHours())}${pad(d.getMinutes())}`;
+  return `${slugify(name, RUN_SLUG_NAME_MAX)}-${stamp}`;
 }

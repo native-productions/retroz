@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import fs from "node:fs/promises";
 import path from "node:path";
 import { create as createFont } from "fontkit";
 import { auth } from "@/lib/auth";
 import { db } from "@/lib/db-client";
-import { toAbsolute, slugify } from "@/lib/paths";
+import { slugify } from "@/lib/paths";
+import { storage } from "@/lib/storage";
 
 export const runtime = "nodejs";
 
@@ -82,12 +82,12 @@ export async function POST(req: Request) {
       slug = `${slugify(family)}-${++n}`;
     }
     const destRelDir = path.join("data", "fonts", slug);
-    await fs.mkdir(toAbsolute(destRelDir), { recursive: true });
+    await storage.ensurePrefix(destRelDir);
 
     const variantData = [];
     for (const v of variants) {
       const filename = `${slug}-${v.weight}${v.style === "italic" ? "i" : ""}.${v.format}`;
-      await fs.writeFile(toAbsolute(path.join(destRelDir, filename)), v.buf);
+      await storage.put(path.join(destRelDir, filename), v.buf);
       variantData.push({
         weight: v.weight,
         style: v.style,

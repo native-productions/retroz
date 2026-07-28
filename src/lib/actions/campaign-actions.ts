@@ -2,13 +2,13 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import fs from "node:fs/promises";
 import path from "node:path";
 import { db } from "@/lib/db-client";
-import { toAbsolute, slugify } from "@/lib/paths";
+import { slugify, toRelative } from "@/lib/paths";
+import { storage } from "@/lib/storage";
 import { providerOfModel } from "@/lib/models";
 import { enqueuePlannerRun } from "@/lib/run-queue";
-import { campaignDir } from "@/lib/planner-executor";
+import { campaignPrefix } from "@/lib/planner-executor";
 import { removeTaskOutputs } from "@/lib/task-outputs";
 import { zonedInstant } from "@/lib/campaign-time";
 import {
@@ -44,7 +44,7 @@ export async function createCampaign(input: unknown) {
   // One campaign-level asset folder (reuses AssetFolder / Asset).
   const slug = await uniqueFolderSlug(data.workflowId, `campaign-${data.name}`);
   const relPath = path.join("data", "assets", workflow.slug, slug);
-  await fs.mkdir(toAbsolute(relPath), { recursive: true });
+  await storage.ensurePrefix(relPath);
   const folder = await db.assetFolder.create({
     data: {
       workflowId: data.workflowId,
@@ -296,7 +296,7 @@ export async function deleteCampaign(id: string) {
 
   // Keep the uploaded assets + their folder (they may be reused). Only the
   // planner's scratch dir is disposable.
-  await fs.rm(campaignDir(id), { recursive: true, force: true });
+  await storage.deletePrefix(campaignPrefix(id));
 
   revalidatePath(`/workflows/${campaign.workflowId}`);
   redirect(`/workflows/${campaign.workflowId}?tab=plan`);

@@ -11,10 +11,13 @@
     "db:migrate": "prisma migrate dev",
     "db:seed": "prisma db seed",
     "db:studio": "prisma studio",
+    "storage:migrate": "bun run scripts/migrate-storage.ts",
+    "storage:migrate-runs": "bun run scripts/migrate-run-folders.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.3.207",
+    "@aws-sdk/client-s3": "^3.1095.0",
     "@hookform/resolvers": "^5.4.0",
     "@openai/codex-sdk": "^0.144.5",
     "@prisma/adapter-pg": "^7.8.0",

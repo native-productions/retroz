@@ -2,10 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import fs from "node:fs/promises";
 import path from "node:path";
 import { db } from "@/lib/db-client";
-import { DATA_ROOT, slugify } from "@/lib/paths";
+import { DATA_ROOT, slugify, toRelative } from "@/lib/paths";
+import { storage } from "@/lib/storage";
 import {
   workflowCreateSchema,
   workflowUpdateSchema,
@@ -34,8 +34,8 @@ export async function createWorkflow(input: unknown) {
   });
 
   // pre-create the asset root for this workflow
-  await fs.mkdir(path.join(DATA_ROOT, "assets", slug), { recursive: true });
-  await fs.mkdir(path.join(DATA_ROOT, "tasks", slug), { recursive: true });
+  await storage.ensurePrefix(toRelative(path.join(DATA_ROOT, "assets", slug)));
+  await storage.ensurePrefix(toRelative(path.join(DATA_ROOT, "tasks", slug)));
 
   revalidatePath("/workflows");
   redirect(`/workflows/${workflow.id}`);

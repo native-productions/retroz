@@ -2,10 +2,10 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import fs from "node:fs/promises";
 import path from "node:path";
 import { db } from "@/lib/db-client";
-import { toAbsolute, slugify } from "@/lib/paths";
+import { slugify } from "@/lib/paths";
+import { storage } from "@/lib/storage";
 import {
   folderCreateSchema,
   folderRenameSchema,
@@ -44,7 +44,7 @@ export async function createFolder(input: unknown) {
   const slug = await uniqueFolderSlug(data.workflowId, data.name);
   const relPath = path.join("data", "assets", workflow.slug, slug);
 
-  await fs.mkdir(toAbsolute(relPath), { recursive: true });
+  await storage.ensurePrefix(relPath);
 
   await db.assetFolder.create({
     data: {
@@ -75,7 +75,7 @@ export async function deleteFolder(id: string, options?: { redirectTo?: string }
   const folder = await db.assetFolder.findUniqueOrThrow({ where: { id } });
   await db.assetFolder.delete({ where: { id } });
   // best-effort remove files
-  await fs.rm(toAbsolute(folder.relPath), { recursive: true, force: true });
+  await storage.deletePrefix(folder.relPath);
   revalidatePath(`/workflows/${folder.workflowId}`);
   if (options?.redirectTo) redirect(options.redirectTo);
 }
@@ -159,7 +159,7 @@ export async function renameAsset(input: unknown) {
 
   if (filename !== asset.filename) {
     const relPath = path.join(dir, filename);
-    await fs.rename(toAbsolute(asset.relPath), toAbsolute(relPath));
+    await storage.move(asset.relPath, relPath);
     await db.asset.update({
       where: { id: asset.id },
       data: { filename, relPath },
@@ -172,6 +172,6 @@ export async function renameAsset(input: unknown) {
 export async function deleteAsset(id: string) {
   const asset = await db.asset.findUniqueOrThrow({ where: { id } });
   await db.asset.delete({ where: { id } });
-  await fs.rm(toAbsolute(asset.relPath), { force: true });
+  await storage.delete(asset.relPath);
   revalidatePath(`/assets/${asset.folderId}`);
 }

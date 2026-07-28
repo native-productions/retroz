@@ -1,21 +1,14 @@
-import fs from "node:fs";
 import path from "node:path";
 import { auth } from "@/lib/auth";
 import { DATA_ROOT } from "@/lib/paths";
+import { contentTypeFor } from "@/lib/mime";
+import { storage } from "@/lib/storage";
 
 export const runtime = "nodejs";
 
-const MIME: Record<string, string> = {
-  ".png": "image/png",
-  ".jpg": "image/jpeg",
-  ".jpeg": "image/jpeg",
-  ".webp": "image/webp",
-  ".svg": "image/svg+xml",
-  ".html": "text/html; charset=utf-8",
-};
-
-// Serves files from the local data/ store. Auth-gated + path-traversal-guarded:
-// only paths that resolve inside DATA_ROOT are allowed.
+// Serves files from the blob store. Auth-gated + traversal-guarded: only keys
+// that resolve inside DATA_ROOT are allowed. Used by the local driver; with a
+// public R2 bucket the UI links to object URLs directly and skips this route.
 export async function GET(req: Request) {
   const session = await auth();
   if (!session?.user) return new Response("Unauthorized", { status: 401 });
@@ -28,15 +21,17 @@ export async function GET(req: Request) {
   if (abs !== DATA_ROOT && !abs.startsWith(DATA_ROOT + path.sep)) {
     return new Response("Forbidden", { status: 403 });
   }
-  if (!fs.existsSync(abs) || !fs.statSync(abs).isFile()) {
+
+  let data: Buffer;
+  try {
+    data = await storage.get(rel);
+  } catch {
     return new Response("Not found", { status: 404 });
   }
 
-  const ext = path.extname(abs).toLowerCase();
-  const data = fs.readFileSync(abs);
   return new Response(new Uint8Array(data), {
     headers: {
-      "Content-Type": MIME[ext] ?? "application/octet-stream",
+      "Content-Type": contentTypeFor(abs),
       "Cache-Control": "no-store",
     },
   });

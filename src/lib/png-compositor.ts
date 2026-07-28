@@ -22,6 +22,8 @@ export interface RenderResult {
   filename: string;
   width: number;
   height: number;
+  /** The PNG bytes, so the caller can persist them to the blob store. */
+  buffer: Buffer;
 }
 
 /**
@@ -69,21 +71,23 @@ export async function renderHtmlToPng(opts: {
     deviceScaleFactor: 2,
   });
   const page = await context.newPage();
+  let buffer: Buffer;
   try {
     await page.goto(pathToFileURL(tmpHtml).href, { waitUntil: "networkidle" });
     await page.evaluate(() =>
       "fonts" in document ? (document as Document).fonts.ready : null,
     );
-    await page.screenshot({
-      path: absPath,
-      clip: { x: 0, y: 0, width, height },
-    });
+    buffer = await page.screenshot({ clip: { x: 0, y: 0, width, height } });
   } finally {
     await context.close();
     await fs.rm(tmpHtml, { force: true });
   }
 
-  return { absPath, filename, width, height };
+  // Also land it in the output directory so the agent can inspect what it just
+  // produced; the caller is responsible for persisting the bytes to storage.
+  await fs.writeFile(absPath, buffer);
+
+  return { absPath, filename, width, height, buffer };
 }
 
 export async function closeBrowser(): Promise<void> {

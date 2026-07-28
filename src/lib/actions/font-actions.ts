@@ -1,10 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import fs from "node:fs/promises";
 import path from "node:path";
 import { db } from "@/lib/db-client";
-import { toAbsolute, slugify } from "@/lib/paths";
+import { slugify } from "@/lib/paths";
+import { storage } from "@/lib/storage";
 import { fetchGoogleFont, resolveFamily } from "@/lib/google-fonts";
 import { mapGoogleCategory } from "@/lib/font-category";
 import {
@@ -29,14 +29,8 @@ export async function addGoogleFont(input: unknown) {
   const family = resolveFamily(data.input);
   const slug = await uniqueFontSlug(family);
   const destRelDir = path.join("data", "fonts", slug);
-  const destAbsDir = toAbsolute(destRelDir);
 
-  const result = await fetchGoogleFont(
-    data.input,
-    slug,
-    destAbsDir,
-    destRelDir,
-  );
+  const result = await fetchGoogleFont(data.input, slug, destRelDir);
   if (result.variants.length === 0) {
     throw new Error(`Could not download "${family}".`);
   }
@@ -73,14 +67,13 @@ export async function addUrlFont(input: unknown) {
   );
   const format = ["woff2", "woff", "ttf", "otf"].includes(ext) ? ext : "woff2";
   const destRelDir = path.join("data", "fonts", slug);
-  const destAbsDir = toAbsolute(destRelDir);
-  await fs.mkdir(destAbsDir, { recursive: true });
+  await storage.ensurePrefix(destRelDir);
 
   const res = await fetch(data.url);
   if (!res.ok) throw new Error(`Download failed (${res.status}).`);
   const buf = Buffer.from(await res.arrayBuffer());
   const filename = `${slug}-${data.weight}${data.style === "italic" ? "i" : ""}.${format}`;
-  await fs.writeFile(path.join(destAbsDir, filename), buf);
+  await storage.put(path.join(destRelDir, filename), buf);
 
   await db.font.create({
     data: {
@@ -113,10 +106,7 @@ export async function updateFont(input: unknown) {
 
 export async function deleteFont(id: string) {
   const font = await db.font.delete({ where: { id } });
-  await fs.rm(toAbsolute(path.join("data", "fonts", font.slug)), {
-    recursive: true,
-    force: true,
-  });
+  await storage.deletePrefix(path.join("data", "fonts", font.slug));
   revalidatePath("/fonts");
 }
 
