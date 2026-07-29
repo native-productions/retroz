@@ -20,6 +20,7 @@ import type {
   WorkAttachment,
   WorkMention,
   WorkMessage,
+  WorkSkillOption,
 } from "@/lib/work-types";
 
 const SUGGESTIONS = [
@@ -45,9 +46,12 @@ export function WorkConversation({
   onAttach,
   onRemoveAttachment,
   onSearchMentions,
+  onSearchSkills,
   onSubmit,
   onStop,
   busy,
+  aspectRatio,
+  onAspectRatioChange,
   railHidden,
   canvasHidden,
   onShowRail,
@@ -67,9 +71,12 @@ export function WorkConversation({
   onAttach: (files: File[]) => void;
   onRemoveAttachment: (id: string) => void;
   onSearchMentions: (query: string) => Promise<WorkAttachment[]>;
+  onSearchSkills: (query: string) => Promise<WorkSkillOption[]>;
   onSubmit: (text: string, mentions: WorkMention[]) => void;
   onStop: () => void;
   busy: boolean;
+  aspectRatio: string | null;
+  onAspectRatioChange: (id: string | null) => void;
   railHidden: boolean;
   canvasHidden: boolean;
   onShowRail: () => void;
@@ -175,9 +182,12 @@ export function WorkConversation({
             onAttach={onAttach}
             onRemoveAttachment={onRemoveAttachment}
             onSearchMentions={onSearchMentions}
+            onSearchSkills={onSearchSkills}
             onSubmit={onSubmit}
             onStop={onStop}
             busy={busy}
+            aspectRatio={aspectRatio}
+            onAspectRatioChange={onAspectRatioChange}
           />
         </div>
       ) : null}

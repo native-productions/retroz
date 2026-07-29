@@ -129,6 +129,7 @@ model AssetFolder {
   tasks        Task[]
   campaigns    Campaign[]
   workSessions WorkSession[]
+  workProjects WorkProject[]
 
   @@unique([workflowId, slug])
   @@index([workflowId])
@@ -146,6 +147,10 @@ model Asset {
   width       Int?
   height      Int?
   description String @default("")
+  // Provider handle for photos pulled from a stock source, e.g. "pexels:12345"
+  // or "wikimedia:98765". Null for uploads. Doubles as the dedupe key so the
+  // agent never downloads the same photo into a folder twice.
+  sourceRef   String?
   // Retrieval keywords (auto-captioned or hand-entered) used by the asset
   // ranker to pick relevant photos per run without loading every image.
   tags          String[] @default([])
@@ -157,6 +162,7 @@ model Asset {
   campaignItemAssets CampaignItemAsset[]
 
   @@index([folderId])
+  @@index([folderId, sourceRef])
 }
 
 // Global, workflow-level assets reused across every task in the workflow
@@ -496,6 +502,11 @@ model WorkProject {
 
   name         String
   slug         String
+  // The project's own image library: photos described once ("use this when you
+  // need the Claude logo") and searched by the agent on every turn. Created on
+  // first use, so older projects have none.
+  assetFolderId String?
+  assetFolder   AssetFolder? @relation(fields: [assetFolderId], references: [id], onDelete: SetNull)
   // Layered on top of workflow.globalInstruction for every session here.
   instruction  String         @default("")
   defaultModel String?
@@ -529,6 +540,9 @@ model WorkSession {
   // Claude session id / Codex thread id — resumed so turns keep their context.
   engineSessionId String?
   model           String?
+  // Locks every render of this session to one shape (see lib/aspect-ratios.ts).
+  // Null lets the agent choose per image, which is the old behaviour.
+  aspectRatio     String?
   archived        Boolean  @default(false)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt

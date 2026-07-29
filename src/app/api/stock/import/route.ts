@@ -137,6 +137,9 @@ export async function POST(req: Request) {
           // Tags come from the caption only — not the author/license string.
           tags: deriveKeywords(alt),
           autoDescribed: true,
+          // Same handle the agent's import_stock writes, so the two paths
+          // dedupe against each other.
+          sourceRef: `${source}:${photo.id}`,
         },
       });
     };

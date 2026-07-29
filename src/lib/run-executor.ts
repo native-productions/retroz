@@ -230,6 +230,16 @@ export async function executeRun(taskRunId: string): Promise<void> {
     outPrefix: outputRelPath,
     fontFaceCss,
     assets,
+    // A photo the agent sources mid-run joins the task's own folder, so the
+    // next run over the same folder already has it. No folder, no stock tools.
+    importTarget:
+      task.assetFolder && assetDirAbs
+        ? {
+            folderId: task.assetFolder.id,
+            relDir: task.assetFolder.relPath,
+            dirAbs: assetDirAbs,
+          }
+        : null,
     record,
   };
 

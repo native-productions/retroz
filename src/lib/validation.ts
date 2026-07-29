@@ -1,4 +1,7 @@
 import { z } from "zod";
+import { ASPECT_RATIOS } from "@/lib/aspect-ratios";
+
+const ASPECT_RATIO_IDS = ASPECT_RATIOS.map((r) => r.id) as [string, ...string[]];
 
 export const workflowCreateSchema = z.object({
   name: z.string().min(1, "Name is required").max(80),
@@ -141,6 +144,11 @@ export const workSessionUpdateSchema = z.object({
   id: z.string().min(1),
   title: z.string().min(1).max(120).optional(),
   model: z.string().nullable().optional(),
+  // An id from lib/aspect-ratios.ts, or null to let the agent choose per image.
+  aspectRatio: z
+    .enum(ASPECT_RATIO_IDS)
+    .nullable()
+    .optional(),
 });
 
 export const workMentionSchema = z.object({

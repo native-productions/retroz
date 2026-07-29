@@ -1,8 +1,18 @@
+import path from "node:path";
 import { z } from "zod";
 import { db } from "@/lib/db-client";
 import { storage } from "@/lib/storage";
 import { renderHtmlToPng } from "@/lib/png-compositor";
-import { rankAssets } from "@/lib/asset-ranker";
+import { rankAssets, deriveKeywords } from "@/lib/asset-ranker";
+import { ALLOWED_IMAGE_MIME, storeImage } from "@/lib/asset-store";
+import { isPexelsConfigured, searchPexels } from "@/lib/pexels";
+import { searchWikimedia } from "@/lib/wikimedia";
+import {
+  ALLOWED_STOCK_HOSTS,
+  isStockSource,
+  type StockPhoto,
+  type StockSource,
+} from "@/lib/stock";
 import type { RunEventType } from "@/generated/prisma/enums";
 
 // The "retroz" tool set exposed to the running agent. Provider-neutral: the
@@ -18,6 +28,19 @@ export interface RunToolAsset {
   tags: string[];
 }
 
+/**
+ * Where photos the agent fetches mid-run are kept. Null when the run has no
+ * library to put them in, which disables the stock tools.
+ */
+export interface ImportTarget {
+  /** Asset rows are created here. */
+  folderId: string;
+  /** Storage key prefix, e.g. `data/assets/<workflow>/<project>`. */
+  relDir: string;
+  /** Staged local directory the agent reads the file back from. */
+  dirAbs: string;
+}
+
 /** Everything a tool needs about the run it belongs to. */
 export interface RunToolContext {
   taskRunId: string;
@@ -27,6 +50,7 @@ export interface RunToolContext {
   outPrefix: string;
   fontFaceCss: string;
   assets: RunToolAsset[];
+  importTarget: ImportTarget | null;
   record: (type: RunEventType, payload: unknown) => Promise<void>;
 }
 
@@ -165,7 +189,233 @@ export const RUN_TOOLS: RunToolDef[] = [
       );
     },
   ),
+  defineRunTool(
+    "search_stock",
+    "Search Wikimedia Commons and Pexels for a freely-licensed photo when nothing in the asset library fits. Returns candidates with their captions, dimensions, licence and URL — nothing is downloaded. Call search_assets FIRST; only reach for this when the library has no usable photo. Pass the chosen candidates to import_stock to actually use them.",
+    {
+      query: z
+        .string()
+        .describe("What the image should show, e.g. 'lighthouse on a cliff at dusk'."),
+      source: z
+        .enum(["any", "wikimedia", "pexels"])
+        .default("any")
+        .describe(
+          "Wikimedia leans documentary and factual (logos, landmarks, people, objects); Pexels leans stock-photography mood shots.",
+        ),
+      limit: z.number().int().min(1).max(20).default(8),
+    },
+    async (ctx, args) => {
+      if (!ctx.importTarget) {
+        return text(
+          "This run has no asset library to import into, so stock search is unavailable. Work with the assets you were given.",
+          true,
+        );
+      }
+
+      const wanted: StockSource[] =
+        args.source === "any" ? ["wikimedia", "pexels"] : [args.source];
+      const notes: string[] = [];
+      const found: StockPhoto[] = [];
+
+      for (const source of wanted) {
+        if (source === "pexels" && !(await isPexelsConfigured())) {
+          notes.push("Pexels is not configured (no API key in Settings).");
+          continue;
+        }
+        try {
+          const result =
+            source === "pexels"
+              ? await searchPexels(args.query, 1, args.limit)
+              : await searchWikimedia(args.query, 1, args.limit);
+          found.push(...result.photos);
+        } catch (err) {
+          notes.push(
+            `${source} search failed: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
+      }
+
+      // Interleave the sources so one provider cannot crowd the other out.
+      const usable = found
+        .filter((p) => !p.mime || ALLOWED_IMAGE_MIME.has(p.mime))
+        .slice(0, args.limit * wanted.length);
+
+      if (usable.length === 0) {
+        return text(
+          [`No usable photos for "${args.query}".`, ...notes].join("\n"),
+        );
+      }
+
+      return text(
+        [
+          ...usable.map(
+            (p) =>
+              `${p.source}:${p.id} :: ${p.width}x${p.height} :: ${p.alt || "(no caption)"}` +
+              ` :: ${p.attribution || "(no attribution)"} :: ${p.full}`,
+          ),
+          ...notes,
+          "",
+          "To use any of these, call import_stock with their id, source and url.",
+        ].join("\n"),
+      );
+    },
+  ),
+  defineRunTool(
+    "import_stock",
+    "Download photos returned by search_stock into this project's asset library and get back absolute paths you can reference from HTML. Import only the ones you will actually place — each becomes a permanent, user-visible asset.",
+    {
+      photos: z
+        .array(
+          z.object({
+            id: z.string().describe("Provider id exactly as search_stock returned it."),
+            source: z.enum(["wikimedia", "pexels"]),
+            url: z.string().describe("The URL from search_stock, unmodified."),
+            alt: z.string().default("").describe("Caption from search_stock."),
+            attribution: z.string().default(""),
+          }),
+        )
+        .min(1)
+        .max(6),
+    },
+    async (ctx, args) => {
+      const target = ctx.importTarget;
+      if (!target) {
+        return text("This run has no asset library to import into.", true);
+      }
+
+      const lines: string[] = [];
+      for (const photo of args.photos) {
+        if (!isStockSource(photo.source)) {
+          lines.push(`${photo.id}: unknown source`);
+          continue;
+        }
+        const sourceRef = `${photo.source}:${photo.id}`;
+
+        // Already in the library — reuse it rather than paying for it twice.
+        const existing = await db.asset.findFirst({
+          where: { folderId: target.folderId, sourceRef },
+        });
+        if (existing) {
+          const abs = await storage.hydrate(
+            existing.relPath,
+            path.join(target.dirAbs, existing.filename),
+          );
+          lines.push(`${sourceRef} :: ${abs} :: already in the library`);
+          continue;
+        }
+
+        // Same SSRF guard as the human-facing import route: a URL the model
+        // invented can only ever point at the provider's own image CDN.
+        let host = "";
+        try {
+          host = new URL(photo.url).hostname;
+        } catch {
+          lines.push(`${sourceRef}: malformed URL`);
+          continue;
+        }
+        if (!ALLOWED_STOCK_HOSTS[photo.source].includes(host)) {
+          lines.push(`${sourceRef}: ${host} is not an allowed ${photo.source} host`);
+          continue;
+        }
+
+        try {
+          const res = await fetchStock(photo.url);
+          if (!res.ok) {
+            lines.push(`${sourceRef}: download failed (HTTP ${res.status})`);
+            continue;
+          }
+          const contentType = (res.headers.get("content-type") ?? "")
+            .split(";")[0]
+            .trim();
+          const mime = ALLOWED_IMAGE_MIME.has(contentType)
+            ? contentType
+            : "image/jpeg";
+          const buf = Buffer.from(await res.arrayBuffer());
+          const ext = mime.split("/")[1]?.replace("jpeg", "jpg") ?? "jpg";
+
+          const stored = await storeImage(target.relDir, {
+            buf,
+            mimeType: mime,
+            name: `${photo.source}-${photo.id}.${ext}`,
+          });
+
+          const description = [photo.alt.trim(), photo.attribution.trim()]
+            .filter(Boolean)
+            .join(" — ");
+          await db.asset.create({
+            data: {
+              folderId: target.folderId,
+              filename: stored.filename,
+              relPath: stored.relPath,
+              mimeType: mime,
+              size: stored.size,
+              width: stored.width,
+              height: stored.height,
+              description,
+              // Tags come from the caption only, never the licence string.
+              tags: deriveKeywords(photo.alt),
+              autoDescribed: true,
+              sourceRef,
+            },
+          });
+
+          const abs = await storage.hydrate(
+            stored.relPath,
+            path.join(target.dirAbs, stored.filename),
+          );
+          // Make it findable by search_assets for the rest of this run.
+          ctx.assets.push({
+            filename: stored.filename,
+            absPath: abs,
+            width: stored.width,
+            height: stored.height,
+            description,
+            tags: deriveKeywords(photo.alt),
+          });
+          await ctx.record("TOOL", {
+            name: "import_stock",
+            sourceRef,
+            filename: stored.filename,
+          });
+
+          lines.push(
+            `${sourceRef} :: ${abs} :: ${stored.width}x${stored.height} :: imported`,
+          );
+        } catch (err) {
+          lines.push(
+            `${sourceRef}: ${err instanceof Error ? err.message : String(err)}`,
+          );
+        }
+      }
+
+      return text(lines.join("\n"));
+    },
+  ),
 ];
+
+/** Wikimedia's API policy requires a descriptive User-Agent; Pexels tolerates it. */
+const STOCK_USER_AGENT = "Retroz/1.0 (local content assistant)";
+
+/**
+ * Download a stock image, retrying once on 429.
+ *
+ * Commons renders thumbnails on demand and rate-limits that generation, so the
+ * first request for an uncached size often 429s while still queueing the render.
+ * A short pause and one retry usually lands it; anything past that is a real
+ * limit and the caller reports it.
+ */
+async function fetchStock(url: string): Promise<Response> {
+  const res = await fetch(url, { headers: { "User-Agent": STOCK_USER_AGENT } });
+  if (res.status !== 429) return res;
+
+  const retryAfter = Number(res.headers.get("retry-after"));
+  const waitMs = Math.min(
+    Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter * 1000 : 1500,
+    5000,
+  );
+  await new Promise((resolve) => setTimeout(resolve, waitMs));
+  return fetch(url, { headers: { "User-Agent": STOCK_USER_AGENT } });
+}
 
 function formatAssetLine(a: RunToolAsset): string {
   const tags = a.tags.length > 0 ? ` :: tags: ${a.tags.join(", ")}` : "";
@@ -203,6 +453,19 @@ export function summarizeToolInput(name: string, input: unknown): unknown {
   if (name.endsWith("submit_campaign_plan") && input && typeof input === "object") {
     const items = (input as Record<string, unknown>).items;
     return { items: Array.isArray(items) ? items.length : 0 };
+  }
+  // Keep the provider handles, drop the CDN URLs — they are multi-hundred-char
+  // and the run log is replayed into the conversation view.
+  if (name.endsWith("import_stock") && input && typeof input === "object") {
+    const photos = (input as Record<string, unknown>).photos;
+    return {
+      photos: Array.isArray(photos)
+        ? photos.map((p) => {
+            const photo = (p ?? {}) as Record<string, unknown>;
+            return `${photo.source}:${photo.id}`;
+          })
+        : [],
+    };
   }
   if (name.endsWith("submit_asset_manifest") && input && typeof input === "object") {
     const requests = (input as Record<string, unknown>).requests;

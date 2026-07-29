@@ -72,6 +72,7 @@ export async function listWorkProjects(): Promise<WorkProject[]> {
     orderBy: { createdAt: "asc" },
     include: {
       _count: { select: { sessions: true, bundles: true } },
+      assetFolder: { select: { _count: { select: { assets: true } } } },
       sessions: {
         where: { archived: false },
         orderBy: { updatedAt: "desc" },
@@ -102,6 +103,7 @@ export async function listWorkProjects(): Promise<WorkProject[]> {
     sessionCount: p._count.sessions,
     renderCount: renderCounts[i],
     bundleCount: p._count.bundles,
+    assetCount: p.assetFolder?._count.assets ?? 0,
     chatSessionId: p.sessions[0]?.id ?? null,
   }));
 }
@@ -137,6 +139,8 @@ export interface WorkSessionDetail {
   projectId: string;
   title: string;
   model: string | null;
+  /** Locked render shape, null when the agent picks per image. */
+  aspectRatio: string | null;
   status: WorkSessionStatus;
   /** The turn still in flight, if any — the client streams this one. */
   liveRunId: string | null;
@@ -226,6 +230,7 @@ export async function getWorkSessionDetail(
     projectId: session.projectId,
     title: session.title,
     model: session.model,
+    aspectRatio: session.aspectRatio,
     status: statusOfRun(lastRun?.status),
     liveRunId: liveRun?.id ?? null,
     messages,

@@ -16,6 +16,8 @@ export interface WorkProject {
   /** PNGs rendered across every session here — the Gallery tab's badge. */
   renderCount: number;
   bundleCount: number;
+  /** Images in the project library the agent can reach. */
+  assetCount: number;
   /** Newest session, so switching project keeps you on the Chat tab. */
   chatSessionId: string | null;
 }
@@ -49,6 +51,16 @@ export interface WorkMention {
   assetId: string;
   relPath: string;
   url: string;
+}
+
+/** A skill the composer can reference with `/slug`. */
+export interface WorkSkillOption {
+  id: string;
+  slug: string;
+  name: string;
+  description: string;
+  /** True when the workflow assigned it, false when it comes from the bank. */
+  assigned: boolean;
 }
 
 export interface WorkUserMessage {

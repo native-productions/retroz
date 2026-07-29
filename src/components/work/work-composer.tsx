@@ -1,17 +1,33 @@
 "use client";
 
 import * as React from "react";
-import { ArrowUp, ImagePlus, LoaderCircle, Square, X } from "lucide-react";
+import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
+import {
+  ArrowUp,
+  Check,
+  Frame,
+  ImagePlus,
+  LoaderCircle,
+  Square,
+  X,
+} from "lucide-react";
 import { cn } from "@/lib/cn";
 import { Button } from "@/components/ui/ui-button";
 import {
-  WorkMentionMenu,
+  WorkTriggerMenu,
   type MentionAnchor,
 } from "@/components/work/work-mention-menu";
-import type { WorkAttachment, WorkMention } from "@/lib/work-types";
+import { ASPECT_RATIOS, findAspectRatio } from "@/lib/aspect-ratios";
+import type {
+  WorkAttachment,
+  WorkMention,
+  WorkSkillOption,
+} from "@/lib/work-types";
 
 const CHIP_CLASS =
   "wk-chip mx-[1px] inline-flex max-w-[15rem] translate-y-[3px] select-none items-center gap-1.5 rounded-[4px] border-2 border-border bg-surface-2 py-[1px] pl-[2px] pr-1.5 font-mono text-[11px] font-semibold leading-[18px] text-fg";
+const SKILL_CHIP_CLASS =
+  "wk-chip mx-[1px] inline-flex max-w-[15rem] translate-y-[3px] select-none items-center rounded-[4px] border-2 border-border bg-surface-2 py-[1px] pl-1 pr-1.5 font-mono text-[11px] font-semibold leading-[18px] text-fg";
 const CHIP_IMG_CLASS =
   "size-[18px] shrink-0 rounded-[2px] border border-border-soft object-cover";
 
@@ -43,6 +59,25 @@ function buildChip(att: WorkAttachment): HTMLSpanElement {
   return chip;
 }
 
+/** The `/` keeps its own colour so the chip reads as a command, not a filename. */
+function buildSkillChip(skill: WorkSkillOption): HTMLSpanElement {
+  const chip = document.createElement("span");
+  chip.contentEditable = "false";
+  chip.dataset.skill = skill.slug;
+  chip.className = SKILL_CHIP_CLASS;
+
+  const slash = document.createElement("span");
+  slash.textContent = "/";
+  slash.className = "text-accent";
+
+  const label = document.createElement("span");
+  label.textContent = skill.slug;
+  label.className = "truncate";
+
+  chip.append(slash, label);
+  return chip;
+}
+
 /** Flattens the editor DOM back into plain text with `@name` tokens. */
 function serialize(root: HTMLElement): { text: string; mentions: WorkMention[] } {
   const mentions: WorkMention[] = [];
@@ -54,6 +89,10 @@ function serialize(root: HTMLElement): { text: string; mentions: WorkMention[] }
       return;
     }
     if (!(node instanceof HTMLElement)) return;
+    if (node.dataset.skill) {
+      out += `/${node.dataset.skill}`;
+      return;
+    }
     if (node.dataset.mention) {
       const name = node.dataset.mention;
       out += `@${name}`;
@@ -81,14 +120,18 @@ function serialize(root: HTMLElement): { text: string; mentions: WorkMention[] }
   return { text: out.replace(/\u00a0/g, " ").trim(), mentions };
 }
 
-interface MentionQuery {
+/** `@` opens the image picker, `/` opens the skill picker. */
+type TriggerKind = "image" | "skill";
+
+interface TriggerQuery {
+  kind: TriggerKind;
   node: Text;
   start: number;
   query: string;
 }
 
-/** Reads a pending `@query` immediately before the caret, if there is one. */
-function readMentionQuery(root: HTMLElement): MentionQuery | null {
+/** Reads a pending `@query` or `/query` immediately before the caret. */
+function readTriggerQuery(root: HTMLElement): TriggerQuery | null {
   const sel = window.getSelection();
   if (!sel || !sel.isCollapsed || !sel.anchorNode) return null;
   if (!root.contains(sel.anchorNode)) return null;
@@ -96,13 +139,15 @@ function readMentionQuery(root: HTMLElement): MentionQuery | null {
 
   const node = sel.anchorNode as Text;
   const before = (node.textContent ?? "").slice(0, sel.anchorOffset);
-  const match = /(?:^|\s)@([\p{L}\d._-]*)$/u.exec(before);
+  // Only at a word boundary, so a URL path or an email never opens the menu.
+  const match = /(?:^|\s)([@/])([\p{L}\d._-]*)$/u.exec(before);
   if (!match) return null;
 
   return {
+    kind: match[1] === "/" ? "skill" : "image",
     node,
-    start: before.length - match[1].length - 1,
-    query: match[1],
+    start: before.length - match[2].length - 1,
+    query: match[2],
   };
 }
 
@@ -136,9 +181,13 @@ export const WorkComposer = React.forwardRef<
     onAttach: (files: File[]) => void;
     onRemoveAttachment: (id: string) => void;
     onSearchMentions: (query: string) => Promise<WorkAttachment[]>;
+    onSearchSkills: (query: string) => Promise<WorkSkillOption[]>;
     onSubmit: (text: string, mentions: WorkMention[]) => void;
     onStop?: () => void;
     busy?: boolean;
+    /** Locked render shape for this session; null lets the agent choose. */
+    aspectRatio: string | null;
+    onAspectRatioChange: (id: string | null) => void;
   }
 >(function WorkComposer(
   {
@@ -148,9 +197,12 @@ export const WorkComposer = React.forwardRef<
     onAttach,
     onRemoveAttachment,
     onSearchMentions,
+    onSearchSkills,
     onSubmit,
     onStop,
     busy = false,
+    aspectRatio,
+    onAspectRatioChange,
   },
   ref,
 ) {
@@ -158,32 +210,42 @@ export const WorkComposer = React.forwardRef<
   const fileRef = React.useRef<HTMLInputElement>(null);
   const [empty, setEmpty] = React.useState(true);
   const [dropping, setDropping] = React.useState(false);
-  const [mention, setMention] = React.useState<{
+  const [trigger, setTrigger] = React.useState<{
+    kind: TriggerKind;
     query: string;
     anchor: MentionAnchor;
   } | null>(null);
-  const [matches, setMatches] = React.useState<WorkAttachment[]>([]);
+  const [images, setImages] = React.useState<WorkAttachment[]>([]);
+  const [skills, setSkills] = React.useState<WorkSkillOption[]>([]);
   const [activeIndex, setActiveIndex] = React.useState(0);
 
   /** Last query the highlight was reset for, so it only resets on real change. */
   const lastQueryRef = React.useRef<string | null>(null);
 
-  // Mention candidates come from the server: this session's uploads plus the
-  // workflow's asset banks, ranked against what has been typed so far.
-  const query = mention?.query ?? null;
+  const optionCount = trigger?.kind === "skill" ? skills.length : images.length;
+
+  // Candidates come from the server: pasted images plus the workflow's asset
+  // banks for `@`, the workflow's skills for `/`.
+  const kind = trigger?.kind ?? null;
+  const query = trigger?.query ?? null;
   React.useEffect(() => {
-    if (query === null) return;
+    if (kind === null || query === null) return;
     let live = true;
     const timer = setTimeout(() => {
-      void onSearchMentions(query).then((rows) => {
-        if (live) setMatches(rows);
+      const search = kind === "skill" ? onSearchSkills : onSearchMentions;
+      void search(query).then((rows) => {
+        if (!live) return;
+        if (kind === "skill") setSkills(rows as WorkSkillOption[]);
+        else setImages(rows as WorkAttachment[]);
+        // A narrower query can return fewer rows than the highlight points at.
+        setActiveIndex((i) => (i < rows.length ? i : 0));
       });
     }, 100);
     return () => {
       live = false;
       clearTimeout(timer);
     };
-  }, [query, onSearchMentions]);
+  }, [kind, query, onSearchMentions, onSearchSkills]);
 
   function syncEmpty() {
     const root = editorRef.current;
@@ -202,20 +264,24 @@ export const WorkComposer = React.forwardRef<
     draftsRef.current[lastSessionRef.current] = root.innerHTML;
     root.innerHTML = draftsRef.current[sessionId] ?? "";
     lastSessionRef.current = sessionId;
-    setMention(null);
+    setTrigger(null);
     syncEmpty();
   }, [sessionId]);
 
-  function refreshMention() {
+  function refreshTrigger() {
     const root = editorRef.current;
     if (!root) return;
-    const found = readMentionQuery(root);
-    const next = found ? found.query : null;
+    const found = readTriggerQuery(root);
+    const next = found ? `${found.kind}:${found.query}` : null;
     if (next !== lastQueryRef.current) {
       lastQueryRef.current = next;
       setActiveIndex(0);
     }
-    setMention(found ? { query: found.query, anchor: caretAnchor(root) } : null);
+    setTrigger(
+      found
+        ? { kind: found.kind, query: found.query, anchor: caretAnchor(root) }
+        : null,
+    );
   }
 
   function focusEditor() {
@@ -244,14 +310,14 @@ export const WorkComposer = React.forwardRef<
     },
   }));
 
-  /** Replaces the pending `@query` (or inserts at the caret) with a chip. */
-  function insertMention(att: WorkAttachment) {
+  /** Replaces the pending `@query` / `/query` (or inserts at the caret) with a chip. */
+  function insertChip(chip: HTMLSpanElement) {
     const root = editorRef.current;
     if (!root) return;
     root.focus();
 
     const sel = window.getSelection();
-    const pending = readMentionQuery(root);
+    const pending = readTriggerQuery(root);
     const range = document.createRange();
 
     if (pending && sel) {
@@ -266,7 +332,6 @@ export const WorkComposer = React.forwardRef<
       range.collapse(false);
     }
 
-    const chip = buildChip(att);
     const trailing = document.createTextNode(" ");
     range.insertNode(trailing);
     range.insertNode(chip);
@@ -278,8 +343,31 @@ export const WorkComposer = React.forwardRef<
     sel?.addRange(after);
 
     lastQueryRef.current = null;
-    setMention(null);
+    setTrigger(null);
     syncEmpty();
+  }
+
+  function insertMention(att: WorkAttachment) {
+    insertChip(buildChip(att));
+  }
+
+  function insertSkill(skill: WorkSkillOption) {
+    insertChip(buildSkillChip(skill));
+  }
+
+  /** Commits whatever the popover is currently highlighting. */
+  function pickActive(): boolean {
+    if (!trigger) return false;
+    if (trigger.kind === "skill") {
+      const skill = skills[activeIndex];
+      if (!skill) return false;
+      insertSkill(skill);
+      return true;
+    }
+    const image = images[activeIndex];
+    if (!image) return false;
+    insertMention(image);
+    return true;
   }
 
   function submit() {
@@ -289,34 +377,35 @@ export const WorkComposer = React.forwardRef<
     if (!text) return;
     root.innerHTML = "";
     draftsRef.current[sessionId] = "";
-    setMention(null);
+    setTrigger(null);
     setEmpty(true);
     onSubmit(text, mentions);
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
-    if (mention) {
+    if (trigger) {
       if (e.key === "ArrowDown") {
         e.preventDefault();
-        setActiveIndex((i) => (matches.length ? (i + 1) % matches.length : 0));
+        setActiveIndex((i) => (optionCount ? (i + 1) % optionCount : 0));
         return;
       }
       if (e.key === "ArrowUp") {
         e.preventDefault();
         setActiveIndex((i) =>
-          matches.length ? (i - 1 + matches.length) % matches.length : 0,
+          optionCount ? (i - 1 + optionCount) % optionCount : 0,
         );
         return;
       }
       if (e.key === "Escape") {
         e.preventDefault();
-        setMention(null);
+        setTrigger(null);
         return;
       }
-      if ((e.key === "Enter" || e.key === "Tab") && matches[activeIndex]) {
-        e.preventDefault();
-        insertMention(matches[activeIndex]);
-        return;
+      if (e.key === "Enter" || e.key === "Tab") {
+        if (pickActive()) {
+          e.preventDefault();
+          return;
+        }
       }
     }
 
@@ -333,7 +422,10 @@ export const WorkComposer = React.forwardRef<
       if (!sel || !sel.isCollapsed || sel.anchorOffset !== 0) return;
       const node = sel.anchorNode;
       const prev = node?.previousSibling;
-      if (prev instanceof HTMLElement && prev.dataset.mention) {
+      if (
+        prev instanceof HTMLElement &&
+        (prev.dataset.mention || prev.dataset.skill)
+      ) {
         e.preventDefault();
         prev.remove();
         syncEmpty();
@@ -413,7 +505,8 @@ export const WorkComposer = React.forwardRef<
               aria-hidden
               className="pointer-events-none absolute inset-x-0 top-0 px-1 py-1.5 text-sm text-fg-muted/60"
             >
-              Describe the post you want. Paste an image, then mention it with @.
+              Describe the post you want. Paste an image and point at it with @,
+              or pull in a recipe with /.
             </p>
           ) : null}
 
@@ -427,11 +520,11 @@ export const WorkComposer = React.forwardRef<
             spellCheck={false}
             onInput={() => {
               syncEmpty();
-              refreshMention();
+              refreshTrigger();
             }}
-            onKeyUp={refreshMention}
-            onMouseUp={refreshMention}
-            onBlur={() => setMention(null)}
+            onKeyUp={refreshTrigger}
+            onMouseUp={refreshTrigger}
+            onBlur={() => setTrigger(null)}
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
             className="max-h-[38vh] min-h-[3.25rem] w-full overflow-y-auto whitespace-pre-wrap break-words px-1 py-1.5 text-sm leading-6 outline-none"
@@ -461,8 +554,12 @@ export const WorkComposer = React.forwardRef<
                 e.target.value = "";
               }}
             />
-            <p className="hidden font-mono text-[10px] uppercase tracking-[0.08em] text-fg-muted/70 sm:block">
-              ⌘V image · @ mention · ⏎ send
+            <AspectRatioPicker
+              value={aspectRatio}
+              onChange={onAspectRatioChange}
+            />
+            <p className="hidden font-mono text-[10px] uppercase tracking-[0.08em] text-fg-muted/70 lg:block">
+              ⌘V image · @ image · / skill · ⏎ send
             </p>
           </div>
 
@@ -486,18 +583,129 @@ export const WorkComposer = React.forwardRef<
         </div>
       </div>
 
-      {mention ? (
-        <WorkMentionMenu
-          items={matches}
+      {trigger ? (
+        <WorkTriggerMenu
+          kind={trigger.kind}
+          images={images}
+          skills={skills}
+          query={trigger.query}
           activeIndex={activeIndex}
-          anchor={mention.anchor}
-          onPick={insertMention}
+          anchor={trigger.anchor}
+          onPickImage={insertMention}
+          onPickSkill={insertSkill}
           onHoverIndex={setActiveIndex}
         />
       ) : null}
     </div>
   );
 });
+
+/**
+ * Locks every render in this session to one shape. It lives in the composer
+ * rather than the session header because it is part of framing the request, and
+ * because a carousel is only usable when its slides agree — the bundle editor
+ * flags the mismatch afterwards, this prevents it up front.
+ */
+function AspectRatioPicker({
+  value,
+  onChange,
+}: {
+  value: string | null;
+  onChange: (id: string | null) => void;
+}) {
+  const active = findAspectRatio(value);
+
+  return (
+    <DropdownMenu.Root>
+      <DropdownMenu.Trigger asChild>
+        <button
+          type="button"
+          title="Render shape"
+          aria-label={`Render shape: ${active ? active.label : "auto"}`}
+          className={cn(
+            "flex h-8 items-center gap-1.5 rounded-[var(--radius-retro)] border-2 px-2 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring active:scale-95",
+            active
+              ? "border-border bg-surface-2 text-fg"
+              : "border-transparent text-fg-muted hover:border-border hover:bg-surface-2 hover:text-fg",
+            "data-[state=open]:border-border data-[state=open]:bg-surface-2",
+          )}
+        >
+          <Frame className="size-4 shrink-0" />
+          <span className="font-mono text-[11px] font-semibold">
+            {active ? active.label : "Auto"}
+          </span>
+        </button>
+      </DropdownMenu.Trigger>
+
+      <DropdownMenu.Portal>
+        <DropdownMenu.Content
+          align="start"
+          side="top"
+          sideOffset={8}
+          className="retro-card z-50 min-w-[13rem] p-1 shadow-hard-lg"
+        >
+          <DropdownMenu.Label className="px-2 pb-1 pt-1.5 font-mono text-[10px] uppercase tracking-widest text-fg-muted/70">
+            Render shape
+          </DropdownMenu.Label>
+
+          <RatioRow
+            label="Auto"
+            hint="Agent picks per image"
+            selected={!active}
+            onSelect={() => onChange(null)}
+          />
+          <DropdownMenu.Separator className="my-1 h-0.5 bg-border-soft" />
+          {ASPECT_RATIOS.map((ratio) => (
+            <RatioRow
+              key={ratio.id}
+              label={ratio.label}
+              hint={`${ratio.hint} · ${ratio.width}×${ratio.height}`}
+              selected={active?.id === ratio.id}
+              onSelect={() => onChange(ratio.id)}
+            />
+          ))}
+        </DropdownMenu.Content>
+      </DropdownMenu.Portal>
+    </DropdownMenu.Root>
+  );
+}
+
+function RatioRow({
+  label,
+  hint,
+  selected,
+  onSelect,
+}: {
+  label: string;
+  hint: string;
+  selected: boolean;
+  onSelect: () => void;
+}) {
+  return (
+    <DropdownMenu.Item
+      onSelect={onSelect}
+      className={cn(
+        "flex cursor-pointer select-none items-center gap-2.5 rounded-[4px] px-2 py-1.5 outline-none data-[highlighted]:bg-secondary data-[highlighted]:text-secondary-fg",
+        selected ? "text-fg" : "text-fg-muted",
+      )}
+    >
+      <span
+        className={cn(
+          "w-11 shrink-0 font-mono text-xs",
+          selected && "font-semibold",
+        )}
+      >
+        {label}
+      </span>
+      <span className="min-w-0 flex-1 truncate font-mono text-[10px] opacity-70">
+        {hint}
+      </span>
+      {selected ? (
+        <Check className="size-3.5 shrink-0" strokeWidth={3} />
+      ) : null}
+    </DropdownMenu.Item>
+  );
+}
 
 function AttachmentTile({
   attachment,

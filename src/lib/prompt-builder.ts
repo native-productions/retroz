@@ -183,17 +183,32 @@ exception is when the instruction EXPLICITLY asks for visible numbering or serie
 branding as a deliberate design element.
 
 === HOW TO WORK ===
-1. Inspect the source photos (use the ${provider === "CODEX" ? "view_image" : "Read"} tool on their paths) so overlays fit
+1. PLAN FIRST. Work out how many images the task needs and what each one says
+   before building anything.
+2. DECIDE, PER IMAGE, WHETHER IT NEEDS A PHOTO AT ALL. A quote card, a statistic,
+   a section break, a definition, a text-led hook — these are usually stronger as
+   pure typography on a flat or gradient ground. Do not reach for a photo to fill
+   space, and do not put one behind text that then needs a scrim to stay legible.
+   A photo earns its place when it shows something the words cannot.
+3. Only when an image genuinely needs one, source it in this order and stop at
+   the first good fit:
+   a. "search_assets" — the source folder and global assets above, matched on
+      their descriptions rather than their filenames;
+   b. "search_stock" then "import_stock" — Wikimedia Commons and Pexels, only
+      when nothing local fits. Import just the ones you will actually place;
+      each becomes a permanent asset in this task's folder. Never invent a URL —
+      pass back exactly what search_stock returned.
+4. Inspect whatever you chose (use the ${provider === "CODEX" ? "view_image" : "Read"} tool on its path) so overlays fit
    the actual composition.
-2. For EACH final image, build a complete self-contained HTML document. Embed
+5. For EACH final image, build a complete self-contained HTML document. Embed
    the source photo as the background using its absolute file:// path
    (e.g. <img src="file://${assetDirAbs ?? "/path"}/photo.png">) or a data URI.
    Inline all CSS. Use the AVAILABLE FONTS above (by font-family name) to match
    the mood — fall back to system fonts only if none fit.
-3. Call the "render_html_to_png" tool with that HTML to export the PNG. Choose a
+6. Call the "render_html_to_png" tool with that HTML to export the PNG. Choose a
    width/height that matches the intended ${platform} format (e.g. 1080x1080
    square, 1080x1350 portrait, 1080x1920 story).
-4. Give each output a clear, ordered filename (e.g. "01-hook.png", "02-tip.png").
+7. Give each output a clear, ordered filename (e.g. "01-hook.png", "02-tip.png").
 
 === OUTPUT CONTRACT ===
 - Write ALL final PNGs into this run's output folder: ${outDirAbs}

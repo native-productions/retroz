@@ -3,7 +3,16 @@
 import * as React from "react";
 import Link from "next/link";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import { Check, ChevronDown, FolderPlus, Images, Layers, MessagesSquare } from "lucide-react";
+import {
+  Check,
+  ChevronDown,
+  FolderPlus,
+  Images,
+  Layers,
+  Library,
+  MessagesSquare,
+  ScrollText,
+} from "lucide-react";
 import { cn } from "@/lib/cn";
 import { WorkProjectDialog } from "@/components/work/work-project-dialog";
 import type { WorkProject } from "@/lib/work-types";
@@ -14,7 +23,12 @@ const ACCENT_TILE: Record<WorkProject["accent"], string> = {
   accent: "bg-accent text-accent-fg",
 };
 
-export type WorkTab = "chat" | "gallery" | "bundles";
+export type WorkTab =
+  | "chat"
+  | "instruction"
+  | "assets"
+  | "gallery"
+  | "bundles";
 
 /** Where a tab lives for a given project. Chat needs a session to land on. */
 export function tabHref(
@@ -54,12 +68,14 @@ export function WorkProjectBar({
 
   const tabs: { key: WorkTab; label: string; icon: typeof Images; count?: number }[] = [
     { key: "chat", label: "Chat", icon: MessagesSquare },
+    { key: "instruction", label: "Brief", icon: ScrollText },
+    { key: "assets", label: "Assets", icon: Library, count: active?.assetCount },
     { key: "gallery", label: "Gallery", icon: Images, count: active?.renderCount },
     { key: "bundles", label: "Bundles", icon: Layers, count: active?.bundleCount },
   ];
 
   return (
-    <header className="flex h-12 shrink-0 items-center gap-3 border-b-2 border-border bg-surface px-3">
+    <header className="flex h-12 shrink-0 items-center justify-between gap-3 border-b-2 border-border bg-surface px-3">
       <DropdownMenu.Root>
         <DropdownMenu.Trigger asChild disabled={projects.length === 0}>
           <button
@@ -134,7 +150,7 @@ export function WorkProjectBar({
       {active ? (
         <nav
           aria-label="Project views"
-          className="inline-flex items-center gap-1 rounded-[var(--radius-retro)] border-2 border-border bg-surface-2 p-1"
+          className="inline-flex shrink-0 items-center gap-1 rounded-[var(--radius-retro)] border-2 border-border bg-surface-2 p-1"
         >
           {tabs.map((entry) => {
             const current = entry.key === tab;

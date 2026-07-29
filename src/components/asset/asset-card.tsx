@@ -33,6 +33,8 @@ interface AssetCardData {
   description: string;
   tags: string[];
   autoDescribed: boolean;
+  /** `pexels:123` / `wikimedia:456` when the agent (or the picker) fetched it. */
+  sourceRef?: string | null;
 }
 
 interface Preview {
@@ -218,6 +220,14 @@ export function AssetCard({ asset }: { asset: AssetCardData }) {
                 </span>
                 <Pencil className="size-3 shrink-0 text-fg-muted opacity-0 transition-opacity group-hover:opacity-100" />
               </button>
+              {asset.sourceRef ? (
+                <span
+                  title={`Imported from ${asset.sourceRef}`}
+                  className="shrink-0 rounded-[3px] border border-border-soft px-1 font-mono text-[9px] uppercase tracking-wide text-fg-muted"
+                >
+                  {asset.sourceRef.split(":")[0]}
+                </span>
+              ) : null}
               <span className="shrink-0 text-[10px] font-mono text-fg-muted">
                 {asset.width && asset.height
                   ? `${asset.width}×${asset.height}`

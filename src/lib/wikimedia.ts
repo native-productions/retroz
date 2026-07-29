@@ -28,15 +28,23 @@ function titleToCaption(title: string): string {
     .trim();
 }
 
-/** Build the size-capped download URL from a thumb URL by swapping the width
- *  segment (…/400px-Name.jpg → …/1280px-Name.jpg). Falls back to the original. */
-function scaledFullUrl(thumburl: string | undefined, original: string): string {
-  if (!thumburl) return original;
-  const swapped = thumburl.replace(
-    new RegExp(`/${THUMB_WIDTH}px-`),
-    `/${FULL_WIDTH}px-`,
-  );
-  return swapped;
+/**
+ * Build the size-capped download URL from a thumb URL by swapping its width
+ * segment (…/500px-Name.jpg → …/1280px-Name.jpg). Matches whatever width came
+ * back rather than the width we asked for: Commons rounds `iiurlwidth` up to
+ * its own thumbnail buckets, so hardcoding THUMB_WIDTH here silently left the
+ * download at preview resolution. Falls back to the original file.
+ */
+function scaledFullUrl(
+  thumburl: string | undefined,
+  original: string,
+  originalWidth: number,
+): string {
+  // Commons refuses to upscale, so anything already smaller than the cap is
+  // downloaded whole.
+  if (!thumburl || originalWidth <= FULL_WIDTH) return original;
+  const swapped = thumburl.replace(/\/\d+px-/, `/${FULL_WIDTH}px-`);
+  return swapped === thumburl ? original : swapped;
 }
 
 interface RawImageInfo {
@@ -110,7 +118,7 @@ export async function searchWikimedia(
       source: "wikimedia",
       alt: caption,
       thumb: ii.thumburl ?? ii.url,
-      full: scaledFullUrl(ii.thumburl, ii.url),
+      full: scaledFullUrl(ii.thumburl, ii.url, ii.width),
       width: ii.width,
       height: ii.height,
       mime: ii.mime,

@@ -12,6 +12,7 @@ import { stopRun } from "@/lib/actions/task-actions";
 import {
   ensureSessionAssetFolder,
   listMentionCandidates,
+  listSkillCandidates,
   sendWorkMessage,
   updateWorkSession,
 } from "@/lib/actions/work-actions";
@@ -73,6 +74,9 @@ export function WorkSessionView({
   const [uploads, setUploads] = React.useState<WorkAttachment[]>([]);
   const [uploading, setUploading] = React.useState(false);
   const [model, setModel] = React.useState(detail?.model ?? "opus");
+  const [aspectRatio, setAspectRatio] = React.useState<string | null>(
+    detail?.aspectRatio ?? null,
+  );
 
   const stream = useWorkStream(runId);
 
@@ -198,10 +202,30 @@ export function WorkSessionView({
     await stopRun(runId);
   }
 
+  // Stable identity: the composer debounces on this, and a fresh closure on
+  // every streamed event would keep restarting the timer mid-run.
+  const searchMentions = React.useCallback(
+    (query: string) =>
+      sessionId ? listMentionCandidates(sessionId, query) : Promise.resolve([]),
+    [sessionId],
+  );
+
+  const searchSkills = React.useCallback(
+    (query: string) =>
+      sessionId ? listSkillCandidates(sessionId, query) : Promise.resolve([]),
+    [sessionId],
+  );
+
   async function changeModel(next: string) {
     setModel(next);
     if (!sessionId) return;
     await updateWorkSession({ id: sessionId, model: next });
+  }
+
+  async function changeAspectRatio(next: string | null) {
+    setAspectRatio(next);
+    if (!sessionId) return;
+    await updateWorkSession({ id: sessionId, aspectRatio: next });
   }
 
   return (
@@ -218,12 +242,13 @@ export function WorkSessionView({
         uploading={uploading}
         onAttach={attach}
         onRemoveAttachment={removeAttachment}
-        onSearchMentions={(query) =>
-          sessionId ? listMentionCandidates(sessionId, query) : Promise.resolve([])
-        }
+        onSearchMentions={searchMentions}
+        onSearchSkills={searchSkills}
         onSubmit={submit}
         onStop={stop}
         busy={busy}
+        aspectRatio={aspectRatio}
+        onAspectRatioChange={changeAspectRatio}
         railHidden={railHidden}
         canvasHidden={canvasHidden}
         onShowRail={onShowRail}

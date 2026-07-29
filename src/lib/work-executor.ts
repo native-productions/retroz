@@ -5,6 +5,8 @@ import { openRunWorkspace } from "@/lib/run-workspace";
 import { resolveProviderModel } from "@/lib/models";
 import { buildFontFaceCss } from "@/lib/font-css";
 import { buildWorkPrompt, buildWorkTurnPrompt } from "@/lib/work-prompt";
+import { aspectRatioRule } from "@/lib/aspect-ratios";
+import { ensureProjectAssetFolderRow } from "@/lib/project-assets";
 import { emitRunEvent, type RunBusEvent } from "@/lib/run-bus";
 import {
   RUN_TOOLS,
@@ -48,7 +50,7 @@ export async function executeWorkTurn(taskRunId: string): Promise<void> {
   const session = await db.workSession.findUnique({
     where: { taskId: run.taskId },
     include: {
-      project: true,
+      project: { include: { assetFolder: true } },
       assetFolder: true,
       messages: { orderBy: { createdAt: "asc" } },
     },
@@ -113,8 +115,36 @@ export async function executeWorkTurn(taskRunId: string): Promise<void> {
   // Assets from other folders are staged only when this message mentioned one,
   // so a big asset bank never gets copied for a chat turn.
   const assets: (RunToolAsset & {
-    origin: "session" | "folder" | "global";
+    origin: "session" | "project" | "folder" | "global";
   })[] = [];
+
+  // The project library: images described once ("use this when you need the
+  // Claude logo") and reachable on every turn. Also where photos the agent
+  // sources from Wikimedia/Pexels land.
+  // Created on demand rather than read, so the stock tools work on the very
+  // first turn of a project the user has never opened the Assets tab for.
+  const projectFolder = await ensureProjectAssetFolderRow(project.id);
+  const projectDirAbs = await workspace.dir(projectFolder.relPath, "project");
+  const importTarget: RunToolContext["importTarget"] = {
+    folderId: projectFolder.id,
+    relDir: projectFolder.relPath,
+    dirAbs: projectDirAbs,
+  };
+  const projectRows = await db.asset.findMany({
+    where: { folderId: projectFolder.id },
+    orderBy: { createdAt: "asc" },
+  });
+  for (const a of projectRows) {
+    assets.push({
+      filename: a.filename,
+      absPath: path.join(projectDirAbs, a.filename),
+      width: a.width,
+      height: a.height,
+      description: a.description,
+      tags: a.tags,
+      origin: "project",
+    });
+  }
 
   if (session.assetFolder) {
     const dirAbs = await workspace.dir(session.assetFolder.relPath, "session");
@@ -227,14 +257,42 @@ export async function executeWorkTurn(taskRunId: string): Promise<void> {
     (relPath) => fontPaths.get(relPath) ?? relPath,
   );
 
-  // --- skills (Claude-only: they live in .claude/skills, loaded by the SDK) ---
+  // --- skills ---
+  // Under Claude the SDK loads these off disk from .claude/skills, so the
+  // prompt only needs to name them. Codex has no such loader, so any skill the
+  // message asked for by /slug is inlined below instead.
   const assignedSkills = await db.workflowSkill.findMany({
     where: { workflowId: workflow.id },
     include: { skill: true },
   });
-  const skillRows = assignedSkills.map((w) => w.skill).filter((s) => s.enabled);
+  const assignedRows = assignedSkills
+    .map((w) => w.skill)
+    .filter((s) => s.enabled);
+  // No assignment means the workflow runs with the whole enabled bank.
+  const skillRows =
+    assignedRows.length > 0
+      ? assignedRows
+      : await db.skill.findMany({ where: { enabled: true } });
   const skillsOption: string[] | "all" =
-    skillRows.length > 0 ? skillRows.map((s) => s.slug) : "all";
+    assignedRows.length > 0 ? assignedRows.map((s) => s.slug) : "all";
+
+  // `/slug` in the message is an explicit "use this recipe".
+  const requestedSlugs = new Set(
+    [...(message?.text ?? "").matchAll(/(?:^|\s)\/([a-z0-9][a-z0-9._-]*)/gi)].map(
+      (m) => m[1].toLowerCase(),
+    ),
+  );
+  const requestedSkills = skillRows.filter((s) =>
+    requestedSlugs.has(s.slug.toLowerCase()),
+  );
+  const inlinedSkills =
+    provider === "CLAUDE"
+      ? []
+      : requestedSkills.map((s) => ({
+          slug: s.slug,
+          name: s.name,
+          content: s.content,
+        }));
 
   // --- event recorder (persist + live tap) ---
   let seq = 0;
@@ -263,6 +321,10 @@ export async function executeWorkTurn(taskRunId: string): Promise<void> {
   });
   await record("STATUS", { status: "RUNNING" });
 
+  // The session's locked shape, restated on every turn so a change mid-session
+  // takes effect on the next render rather than the next session.
+  const aspectRule = aspectRatioRule(session.aspectRatio);
+
   const fullPrompt = buildWorkPrompt({
     provider,
     workflowName: workflow.name,
@@ -283,13 +345,33 @@ export async function executeWorkTurn(taskRunId: string): Promise<void> {
       provider === "CLAUDE"
         ? skillRows.map((s) => ({ slug: s.slug, description: s.description }))
         : [],
+    inlinedSkills,
+    aspectRule,
     message: message?.text ?? "",
   });
 
   // Resume only makes sense once this session has actually run before.
   const canResume = Boolean(session.engineSessionId) && priorTurns.length > 0;
+
+  // A resumed session is still holding the brief it opened with, so re-send it
+  // when the project has been edited since this session's previous turn.
+  const lastTurnAt = (
+    await db.taskRun.findFirst({
+      where: { taskId: run.taskId, id: { not: taskRunId } },
+      orderBy: { createdAt: "desc" },
+      select: { createdAt: true },
+    })
+  )?.createdAt;
+  const briefChanged =
+    Boolean(lastTurnAt) && project.updatedAt > (lastTurnAt as Date);
+
   const turnPrompt = buildWorkTurnPrompt({
     mentioned,
+    inlinedSkills,
+    revisedBrief: briefChanged
+      ? { projectName: project.name, instruction: project.instruction }
+      : null,
+    aspectRule,
     message: message?.text ?? "",
   });
 
@@ -299,6 +381,7 @@ export async function executeWorkTurn(taskRunId: string): Promise<void> {
     outPrefix: outputRelPath,
     fontFaceCss,
     assets,
+    importTarget,
     record,
   };
 
