@@ -23,17 +23,22 @@ export async function runCodexAgent(input: CodexRunInput): Promise<AgentRunResul
     },
   });
 
-  const thread = codex.startThread({
+  const threadOptions = {
     model: input.model,
     modelReasoningEffort: input.reasoningEffort as ModelReasoningEffort,
     workingDirectory: input.cwd,
     additionalDirectories: input.additionalDirectories,
     // Codex cancels MCP tool calls under a restricted sandbox, which would kill
     // the renderer. Full access matches the Claude path (bypassPermissions).
-    sandboxMode: "danger-full-access",
-    approvalPolicy: "never",
+    sandboxMode: "danger-full-access" as const,
+    approvalPolicy: "never" as const,
     skipGitRepoCheck: true,
-  });
+  };
+
+  // Work continues one conversation across turns; every other caller starts cold.
+  const thread = input.resumeSessionId
+    ? codex.resumeThread(input.resumeSessionId, threadOptions)
+    : codex.startThread(threadOptions);
 
   const startedAt = Date.now();
   const usage: Usage = {
@@ -118,9 +123,25 @@ async function recordItem(record: RecordEvent, item: ThreadItem): Promise<void> 
     case "web_search":
       await record("TOOL", { name: "WebSearch", input: { query: item.query } });
       break;
+    case "todo_list": {
+      // Normalised onto the Claude TodoWrite shape so one plan panel serves
+      // both engines. Codex only reports done/not-done, so the first unfinished
+      // item is treated as the one in flight.
+      let seenActive = false;
+      const todos = item.items.map((t) => {
+        const active = !t.completed && !seenActive;
+        if (active) seenActive = true;
+        return {
+          content: t.text,
+          status: t.completed ? "completed" : active ? "in_progress" : "pending",
+        };
+      });
+      await record("TOOL", { name: "TodoWrite", input: { todos } });
+      break;
+    }
     case "error":
       await record("ERROR", { message: item.message });
       break;
-    // reasoning + todo_list are progress noise — not part of the run log.
+    // reasoning is progress noise — not part of the run log.
   }
 }

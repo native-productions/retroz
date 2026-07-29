@@ -19,7 +19,14 @@ export default async function WorkflowsPage() {
   const workflows = await db.workflow.findMany({
     orderBy: { updatedAt: "desc" },
     include: {
-      _count: { select: { tasks: true, assetFolders: true, schedules: true } },
+      _count: {
+        select: {
+          // Hidden Work-session tasks are not part of the workflow's task list.
+          tasks: { where: { workSession: null } },
+          assetFolders: true,
+          schedules: true,
+        },
+      },
     },
   });
 

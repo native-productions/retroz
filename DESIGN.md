@@ -32,10 +32,31 @@ Semantic tokens (theme-swapped — always use these, e.g. `bg-surface`,
 `--accent` / `--accent-fg` `--ring` `--danger`
 
 - **Light** = warm cream (`--bg #f7f2e9`, ink `--fg #1d1524`).
-- **Dark** (default) = purple-tinted near-black (`--bg #0d0a14`, `--fg #f3ecff`).
+- **Dark** (default) = pure neutral black (`--bg #000000`, `--fg #f4f4f4`). Base
+  surfaces carry no hue — colour only ever arrives through the brand accents.
 
 Themes are class-based (`.dark` on `<html>`) via `next-themes`. Every color must
 resolve in both — never hardcode a hex that only works in one theme.
+
+### Chart palette
+
+Charts draw from a fixed categorical order that is **never cycled**:
+
+| Token | Value | Role |
+| --- | --- | --- |
+| `--chart-1` | `--purple-500` `#7c53ff` | series 1 (e.g. input tokens) |
+| `--chart-2` | `--pink-500` `#ff2e93` | series 2 (e.g. output tokens) |
+| `--chart-3` | `--green-600` `#0ba152` | series 3 / the `DONE` status fill |
+
+These exact steps were checked with the data-viz validator against **both**
+chart surfaces (light `#fffdf8`, dark `#0a0a0a`): lightness band, chroma floor,
+CVD separation, normal-vision floor, and contrast all pass, so one set serves
+both themes and the tokens are deliberately not overridden in `.dark`. Changing
+a step means re-running the validator.
+
+Run outcomes use the reserved status palette (`--chart-3` / `--danger` /
+`--fg-muted`), which is red-versus-green by definition and therefore always
+ships with a glyph and a written count, never colour alone.
 
 ## Typography
 
@@ -71,6 +92,12 @@ Radix-backed, retro-styled primitives — reuse these, don't re-roll:
 
 Shared layout: `components/page-header.tsx` → `PageHeader`, `PageBody`, `EmptyState`.
 Merge classes with `cn()` from `@/lib/cn`.
+
+**One exception:** the dashboard (`/`) skips `PageHeader` for its own colour-block
+masthead, and it is the only surface that runs the full brand palette at once
+(`components/dashboard/*`). Every other page keeps `PageHeader` and the
+restrained default. The Work playground (`/work`) is the other layout exception:
+it owns the full viewport and nests its own rail, so it also skips `PageHeader`.
 
 ## Do / don't
 

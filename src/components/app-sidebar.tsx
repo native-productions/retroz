@@ -12,6 +12,7 @@ import {
   FolderOpen,
   LayoutDashboard,
   LogOut,
+  MessagesSquare,
   Moon,
   PanelLeftClose,
   PanelLeftOpen,
@@ -45,6 +46,7 @@ type NavEntry = NavLink | NavFolder;
 const NAV: NavEntry[] = [
   { kind: "link", href: "/", label: "Dashboard", icon: LayoutDashboard },
   { kind: "link", href: "/workflows", label: "Workflow", icon: WorkflowIcon },
+  { kind: "link", href: "/work", label: "Work", icon: MessagesSquare },
   {
     kind: "folder",
     id: "master",

@@ -64,11 +64,14 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Folder not found" }, { status: 404 });
   }
 
-  let count = 0;
+  // The created rows come back so callers that need to reference an upload
+  // immediately (the Work composer builds an @mention out of it) don't have to
+  // re-query the folder.
+  const created: { id: string; filename: string; relPath: string }[] = [];
   for (const file of files) {
     const stored = await store(folder.relPath, file);
     if (!stored) continue;
-    await db.asset.create({
+    const asset = await db.asset.create({
       data: {
         folderId,
         filename: stored.filename,
@@ -79,10 +82,11 @@ export async function POST(req: Request) {
         height: stored.height,
         description,
       },
+      select: { id: true, filename: true, relPath: true },
     });
-    count++;
+    created.push(asset);
   }
-  return NextResponse.json({ created: count });
+  return NextResponse.json({ created: created.length, assets: created });
 }
 
 /** Store one upload, skipping anything that is not an accepted image type. */

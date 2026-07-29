@@ -5,7 +5,9 @@ import { TasksBrowser } from "@/components/task/tasks-browser";
 export async function TasksTab({ workflowId }: { workflowId: string }) {
   const [tasks, folders, campaigns] = await Promise.all([
     db.task.findMany({
-      where: { workflowId },
+      // Work sessions run on hidden tasks — they belong to the Work page, not
+      // to the workflow's task list.
+      where: { workflowId, workSession: null },
       orderBy: { createdAt: "desc" },
       include: {
         assetFolder: { select: { name: true } },

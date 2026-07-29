@@ -114,6 +114,72 @@ export const campaignApproveSchema = z.object({
   timezone: z.string().default("Asia/Jakarta"),
 });
 
+// ---------------------------------------------------------------------------
+// Work playground
+// ---------------------------------------------------------------------------
+
+export const workProjectCreateSchema = z.object({
+  workflowId: z.string().min(1),
+  name: z.string().min(1, "Name is required").max(80),
+  instruction: z.string().max(8000).optional(),
+  defaultModel: z.string().nullable().optional(),
+});
+
+export const workProjectUpdateSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1).max(80).optional(),
+  instruction: z.string().max(8000).optional(),
+  defaultModel: z.string().nullable().optional(),
+});
+
+export const workSessionCreateSchema = z.object({
+  projectId: z.string().min(1),
+  title: z.string().min(1).max(120).optional(),
+});
+
+export const workSessionUpdateSchema = z.object({
+  id: z.string().min(1),
+  title: z.string().min(1).max(120).optional(),
+  model: z.string().nullable().optional(),
+});
+
+export const workMentionSchema = z.object({
+  name: z.string().min(1).max(160),
+  assetId: z.string().min(1),
+  relPath: z.string().min(1),
+});
+
+export const workSendMessageSchema = z.object({
+  sessionId: z.string().min(1),
+  text: z.string().min(1, "Say something first").max(8000),
+  mentions: z.array(workMentionSchema).max(20).default([]),
+});
+
+// Bundles are only ever assembled from renders the project already has, so the
+// payloads are id lists. The 200 ceiling is a sanity bound, not the carousel
+// limit — going past 20 slides is warned about in the editor, never blocked.
+export const workBundleCreateSchema = z.object({
+  projectId: z.string().min(1),
+  name: z.string().min(1, "Name the bundle").max(80),
+  artifactIds: z.array(z.string().min(1)).min(1).max(200),
+});
+
+export const workBundleUpdateSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1, "Name the bundle").max(80).optional(),
+  note: z.string().max(1000).optional(),
+});
+
+export const workBundleAddSchema = z.object({
+  bundleId: z.string().min(1),
+  artifactIds: z.array(z.string().min(1)).min(1).max(200),
+});
+
+export const workBundleReorderSchema = z.object({
+  bundleId: z.string().min(1),
+  itemIds: z.array(z.string().min(1)).max(200),
+});
+
 export const skillUpsertSchema = z.object({
   id: z.string().optional(),
   name: z.string().min(1).max(80),

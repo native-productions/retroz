@@ -25,7 +25,8 @@ export default async function WorkflowDetailPage({
       _count: {
         select: {
           assetFolders: true,
-          tasks: true,
+          // Hidden Work-session tasks live on the Work page, not here.
+          tasks: { where: { workSession: null } },
           schedules: true,
           workflowFonts: true,
           workflowSkills: true,

@@ -39,6 +39,7 @@ export async function runClaudeAgent(input: ClaudeRunInput): Promise<AgentRunRes
     prompt: input.prompt,
     options: {
       model: input.model,
+      resume: input.resumeSessionId ?? undefined,
       cwd: input.cwd,
       additionalDirectories: input.additionalDirectories,
       settingSources: ["user", "project"],

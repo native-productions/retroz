@@ -108,7 +108,7 @@ export const RUN_TOOLS: RunToolDef[] = [
         // run viewer can show each image the moment it is produced.
         const relPath = `${ctx.outPrefix}/${res.filename}`;
         await storage.put(relPath, res.buffer, { contentType: "image/png" });
-        await db.runArtifact.create({
+        const artifact = await db.runArtifact.create({
           data: {
             taskRunId: ctx.taskRunId,
             kind: "PNG",
@@ -116,9 +116,14 @@ export const RUN_TOOLS: RunToolDef[] = [
             relPath,
             width: res.width,
             height: res.height,
+            bytes: res.buffer.byteLength,
           },
+          select: { id: true },
         });
+        // The row id travels with the event so a live viewer can act on the
+        // render (bundle it, for instance) before the page ever refreshes.
         await ctx.record("ARTIFACT", {
+          id: artifact.id,
           filename: res.filename,
           relPath,
           width: res.width,
@@ -176,6 +181,23 @@ export function summarizeToolInput(name: string, input: unknown): unknown {
       width: i.width,
       height: i.height,
       htmlBytes: typeof i.html === "string" ? i.html.length : 0,
+    };
+  }
+  // Work's plan panel reads these back, so keep the todos but drop anything
+  // else the engine attaches.
+  if (name.endsWith("TodoWrite") && input && typeof input === "object") {
+    const todos = (input as Record<string, unknown>).todos;
+    return {
+      todos: Array.isArray(todos)
+        ? todos.map((t) => {
+            const todo = (t ?? {}) as Record<string, unknown>;
+            return {
+              content: todo.content,
+              status: todo.status,
+              activeForm: todo.activeForm,
+            };
+          })
+        : [],
     };
   }
   if (name.endsWith("submit_campaign_plan") && input && typeof input === "object") {

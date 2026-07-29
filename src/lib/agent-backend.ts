@@ -18,6 +18,12 @@ export interface AgentRunInput {
   toolContext: unknown;
   /** Built-in tools to allow (Read/Write/Glob/Grep/Bash). */
   baseTools?: string[];
+  /**
+   * Continue an earlier engine session (Claude session id / Codex thread id)
+   * instead of starting cold. Used by Work, where every turn of a conversation
+   * has to see the previous ones.
+   */
+  resumeSessionId?: string | null;
   /** Aborts the agent run when the user stops it. */
   abortController: AbortController;
   record: RecordEvent;

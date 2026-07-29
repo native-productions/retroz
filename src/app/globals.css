@@ -43,24 +43,33 @@
   --ring: var(--purple-500);
   --danger: #e5484d;
   --shadow-color: #1d1524;
+
+  /* Chart palette — fixed categorical order, never cycled. These exact steps
+     were validated with the data-viz checker against BOTH chart surfaces
+     (light #fffdf8, dark #0a0a0a): lightness band, chroma floor, CVD
+     separation, normal-vision floor, and contrast all pass, so one set serves
+     both themes and is deliberately not overridden in .dark. */
+  --chart-1: var(--purple-500);
+  --chart-2: var(--pink-500);
+  --chart-3: var(--green-600);
 }
 
 .dark {
-  /* dark theme (purple-tinted near-black) */
-  --bg: #0d0a14;
-  --bg-grid: #17111f;
-  --surface: #16101f;
-  --surface-2: #1e1630;
-  --border: #322445;
-  --border-soft: #251a35;
-  --fg: #f3ecff;
-  --fg-muted: #a394bd;
+  /* dark theme (pure neutral black — no hue in the base surfaces) */
+  --bg: #000000;
+  --bg-grid: #101010;
+  --surface: #0a0a0a;
+  --surface-2: #151515;
+  --border: #2e2e2e;
+  --border-soft: #1d1d1d;
+  --fg: #f4f4f4;
+  --fg-muted: #9d9d9d;
   --primary: var(--green-400);
   --primary-fg: #052113;
   --secondary: var(--purple-400);
-  --secondary-fg: #120a24;
+  --secondary-fg: #0a0a0a;
   --accent: var(--pink-400);
-  --accent-fg: #250417;
+  --accent-fg: #0a0a0a;
   --ring: var(--purple-400);
   --danger: #ff6369;
   --shadow-color: #000000;
@@ -83,6 +92,10 @@
   --color-accent-fg: var(--accent-fg);
   --color-ring: var(--ring);
   --color-danger: var(--danger);
+
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
 
   --color-green-300: var(--green-300);
   --color-green-400: var(--green-400);
@@ -179,6 +192,47 @@ body {
   );
   mix-blend-mode: multiply;
   border-radius: inherit;
+}
+
+/* Halftone dot field, lifted from the logo. Sits behind masthead and counter
+   blocks so a flat colour panel reads as printed rather than as a swatch. */
+.halftone {
+  background-image: radial-gradient(
+    var(--halftone-dot, rgba(0, 0, 0, 0.16)) 1.4px,
+    transparent 1.5px
+  );
+  background-size: 8px 8px;
+}
+
+/* ---- Work playground ---- */
+
+/* Image chips and attachment tiles appear as the user pastes or mentions. */
+@keyframes wk-chip-in {
+  from {
+    opacity: 0;
+    transform: translateY(3px) scale(0.94);
+  }
+}
+.wk-chip {
+  animation: wk-chip-in 160ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+/* Caret-anchored mention menu: grows from its bottom-left corner. */
+@keyframes wk-pop-in {
+  from {
+    opacity: 0;
+    transform: scale(0.97) translateY(4px);
+  }
+}
+.wk-pop {
+  animation: wk-pop-in 150ms cubic-bezier(0.23, 1, 0.32, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wk-chip,
+  .wk-pop {
+    animation: none;
+  }
 }
 
 ::selection {

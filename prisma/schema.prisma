@@ -76,6 +76,7 @@ model Workflow {
   workflowFonts  WorkflowFont[]
   workflowSkills WorkflowSkill[]
   campaigns      Campaign[]
+  workProjects   WorkProject[]
 }
 
 // ---------------------------------------------------------------------------
@@ -124,9 +125,10 @@ model AssetFolder {
   notes     String?
   createdAt DateTime @default(now())
 
-  assets    Asset[]
-  tasks     Task[]
-  campaigns Campaign[]
+  assets       Asset[]
+  tasks        Task[]
+  campaigns    Campaign[]
+  workSessions WorkSession[]
 
   @@unique([workflowId, slug])
   @@index([workflowId])
@@ -209,6 +211,7 @@ model Task {
 
   runs         TaskRun[]
   campaignItem CampaignItem?
+  workSession  WorkSession?
 
   @@index([workflowId])
   @@index([scheduleId])
@@ -243,15 +246,16 @@ model TaskRun {
   costUsd             Float     @default(0)
   modelUsage          Json?     // Provider-shaped usage detail (Agent SDK modelUsage / Codex turn usage)
   error           String?
-  trigger         String    @default("manual") // manual | schedule
+  trigger         String    @default("manual") // manual | schedule | work
   scheduleId      String?
   schedule        Schedule? @relation(fields: [scheduleId], references: [id], onDelete: SetNull)
   createdAt       DateTime  @default(now())
   startedAt       DateTime?
   finishedAt      DateTime?
 
-  events    RunEvent[]
-  artifacts RunArtifact[]
+  events       RunEvent[]
+  artifacts    RunArtifact[]
+  workMessages WorkMessage[]
 
   @@index([taskId])
   @@index([status])
@@ -303,7 +307,12 @@ model RunArtifact {
   relPath   String
   width     Int?
   height    Int?
+  // Size of the stored file. Null on rows written before the column existed;
+  // `bun run artifacts:backfill` fills those in from the storage driver.
+  bytes     Int?
   createdAt DateTime @default(now())
+
+  bundleItems WorkBundleItem[]
 
   @@index([taskRunId])
 }
@@ -470,6 +479,116 @@ model CampaignPlanRun {
 
   @@index([campaignId])
   @@index([status])
+}
+
+// ---------------------------------------------------------------------------
+// Work — the conversational playground. A project groups sessions; a session is
+// one chat thread whose every turn executes as a TaskRun on a hidden Task, so
+// runs, events, artifacts, streaming, and stop control are all reused as-is.
+// ---------------------------------------------------------------------------
+
+model WorkProject {
+  id         String   @id @default(cuid())
+  // Brand context: the project inherits the workflow's instruction, fonts,
+  // skills, and asset folders, and its hidden tasks hang off this workflow.
+  workflowId String
+  workflow   Workflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  name         String
+  slug         String
+  // Layered on top of workflow.globalInstruction for every session here.
+  instruction  String         @default("")
+  defaultModel String?
+  provider     AgentProvider?
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+
+  sessions WorkSession[]
+  bundles  WorkBundle[]
+
+  @@unique([workflowId, slug])
+  @@index([workflowId])
+}
+
+model WorkSession {
+  id        String      @id @default(cuid())
+  projectId String
+  project   WorkProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  title String @default("New session")
+
+  // The hidden Task every turn of this session runs as. Filtered out of the
+  // workflow's task list the same way campaign-backed tasks are.
+  taskId String @unique
+  task   Task   @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  // Created on first paste; holds this session's uploaded images as Assets.
+  assetFolderId String?
+  assetFolder   AssetFolder? @relation(fields: [assetFolderId], references: [id], onDelete: SetNull)
+
+  // Claude session id / Codex thread id — resumed so turns keep their context.
+  engineSessionId String?
+  model           String?
+  archived        Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  messages WorkMessage[]
+
+  @@index([projectId])
+}
+
+// User turns only. Assistant text and tool activity replay from the RunEvent
+// rows of the linked TaskRun, so there is one source of truth for both live
+// streaming and history.
+model WorkMessage {
+  id        String      @id @default(cuid())
+  sessionId String
+  session   WorkSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  text String
+  // [{ name, assetId, relPath }] — the images this turn pointed at with @.
+  mentions Json?
+
+  taskRunId String?
+  taskRun   TaskRun? @relation(fields: [taskRunId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@index([sessionId, createdAt])
+}
+
+// A named, explicitly ordered set of renders drawn from anywhere in the project
+// — the unit an Instagram carousel is uploaded as. It owns no files: every item
+// points at the RunArtifact that produced the PNG, so deleting the session that
+// made an image also removes it from every bundle it appears in.
+model WorkBundle {
+  id        String      @id @default(cuid())
+  projectId String
+  project   WorkProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  name      String
+  note      String   @default("")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  items WorkBundleItem[]
+
+  @@index([projectId])
+}
+
+model WorkBundleItem {
+  id         String      @id @default(cuid())
+  bundleId   String
+  bundle     WorkBundle  @relation(fields: [bundleId], references: [id], onDelete: Cascade)
+  artifactId String
+  artifact   RunArtifact @relation(fields: [artifactId], references: [id], onDelete: Cascade)
+
+  // Slide position, zero-based and contiguous — rewritten wholesale on reorder.
+  order Int
+
+  @@unique([bundleId, artifactId])
+  @@index([bundleId, order])
 }
 
 // ---------------------------------------------------------------------------
