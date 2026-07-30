@@ -471,7 +471,28 @@ export function summarizeToolInput(name: string, input: unknown): unknown {
     const requests = (input as Record<string, unknown>).requests;
     return { requests: Array.isArray(requests) ? requests.length : 0 };
   }
+  // The query is the whole story for a search; the tuning knobs are noise.
+  if (name.endsWith("web_search") && input && typeof input === "object") {
+    const i = input as Record<string, unknown>;
+    return { query: i.query, ...(i.topic === "news" ? { topic: "news" } : {}) };
+  }
+  // Show which sites were read, not the URLs — they are long and the run log is
+  // replayed into the conversation view.
+  if (name.endsWith("web_extract") && input && typeof input === "object") {
+    const urls = (input as Record<string, unknown>).urls;
+    return {
+      sources: Array.isArray(urls) ? urls.map((u) => hostOf(String(u))) : [],
+    };
+  }
   return input;
+}
+
+function hostOf(url: string): string {
+  try {
+    return new URL(url).hostname.replace(/^www\./, "");
+  } catch {
+    return url;
+  }
 }
 
 // ---------------------------------------------------------------------------

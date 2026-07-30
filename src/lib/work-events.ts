@@ -45,6 +45,12 @@ export function describeTool(name: string, input: unknown): string {
   }
   if (label === "search_assets") return String(i.query ?? "");
   if (label === "list_assets") return "all source photos";
+  if (label === "web_search") return String(i.query ?? "");
+  // summarizeToolInput rewrites the URLs to hostnames before they are persisted.
+  if (label === "web_extract") {
+    const sources = Array.isArray(i.sources) ? i.sources : [];
+    return sources.length > 0 ? sources.join(", ") : "web sources";
+  }
   if (label === "TodoWrite") {
     const todos = Array.isArray(i.todos) ? i.todos : [];
     return `${todos.length} step${todos.length === 1 ? "" : "s"}`;

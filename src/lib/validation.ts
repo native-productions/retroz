@@ -3,6 +3,8 @@ import { ASPECT_RATIOS } from "@/lib/aspect-ratios";
 
 const ASPECT_RATIO_IDS = ASPECT_RATIOS.map((r) => r.id) as [string, ...string[]];
 
+const researchModeEnum = z.enum(["OFF", "AUTO", "ON"]);
+
 export const workflowCreateSchema = z.object({
   name: z.string().min(1, "Name is required").max(80),
   description: z.string().max(300).optional(),
@@ -15,6 +17,7 @@ export const workflowUpdateSchema = z.object({
   description: z.string().max(300).nullable().optional(),
   globalInstruction: z.string().max(8000).optional(),
   defaultModel: z.string().nullable().optional(),
+  researchMode: researchModeEnum.optional(),
 });
 
 export const folderCreateSchema = z.object({
@@ -85,6 +88,11 @@ export const campaignCreateSchema = z.object({
   brief: z.string().max(20000).optional(),
   format: z.enum(["SINGLE", "CAROUSEL"]).default("SINGLE"),
   model: z.string().nullable().optional(),
+});
+
+export const campaignUpdateSchema = z.object({
+  id: z.string().min(1),
+  researchMode: researchModeEnum,
 });
 
 export const campaignItemUpdateSchema = z.object({
@@ -161,6 +169,7 @@ export const workSendMessageSchema = z.object({
   sessionId: z.string().min(1),
   text: z.string().min(1, "Say something first").max(8000),
   mentions: z.array(workMentionSchema).max(20).default([]),
+  researchMode: researchModeEnum.default("AUTO"),
 });
 
 // Bundles are only ever assembled from renders the project already has, so the
@@ -202,6 +211,7 @@ export const settingsUpdateSchema = z.object({
   codexModel: z.string().min(1),
   codexReasoningEffort: z.enum(["low", "medium", "high", "xhigh"]),
   pexelsApiKey: z.string().trim().max(200).default(""),
+  tavilyApiKey: z.string().trim().max(200).default(""),
 });
 
 const fontCategoryEnum = z.enum([

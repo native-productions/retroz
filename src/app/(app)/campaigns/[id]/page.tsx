@@ -13,6 +13,7 @@ import { CampaignPlannerViewer } from "@/components/campaign/campaign-planner-vi
 import { CampaignCalendarEditor } from "@/components/campaign/campaign-calendar-editor";
 import { CampaignAssetChecklist } from "@/components/campaign/campaign-asset-checklist";
 import { CampaignScheduleForm } from "@/components/campaign/campaign-schedule-form";
+import { CampaignResearchSelect } from "@/components/campaign/campaign-research-select";
 import {
   runPlanner,
   cancelCampaign,
@@ -20,6 +21,7 @@ import {
 } from "@/lib/actions/campaign-actions";
 import { toYmd, formatInTz } from "@/lib/campaign-time";
 import { isPexelsConfigured } from "@/lib/pexels";
+import { isTavilyConfigured } from "@/lib/tavily";
 
 export const dynamic = "force-dynamic";
 
@@ -84,6 +86,7 @@ export default async function CampaignDetailPage({
   if (!campaign) notFound();
 
   const pexelsEnabled = await isPexelsConfigured();
+  const researchAvailable = await isTavilyConfigured();
 
   const folderAssets = campaign.assetFolderId
     ? await db.asset.findMany({
@@ -233,6 +236,15 @@ export default async function CampaignDetailPage({
             }
           />
         </dl>
+      </Card>
+
+      <Card className="p-4">
+        <p className="mb-3 font-display text-sm font-semibold">Planning</p>
+        <CampaignResearchSelect
+          campaignId={campaign.id}
+          initialResearchMode={campaign.researchMode}
+          researchAvailable={researchAvailable}
+        />
       </Card>
 
       {/* Danger zone */}

@@ -16,6 +16,7 @@ import {
   sendWorkMessage,
   updateWorkSession,
 } from "@/lib/actions/work-actions";
+import type { ResearchMode } from "@/lib/research";
 import type { WorkSessionDetail } from "@/lib/work-queries";
 import type {
   WorkAttachment,
@@ -49,6 +50,7 @@ export function WorkSessionView({
   onHideCanvas,
   onNewProject,
   onNewSession,
+  researchAvailable,
 }: {
   detail: WorkSessionDetail | null;
   /** Scope for the canvas's "Add to bundle" action. */
@@ -63,6 +65,8 @@ export function WorkSessionView({
   onHideCanvas: () => void;
   onNewProject: () => void;
   onNewSession: () => void;
+  /** False when no Tavily key is saved — the composer hides the picker. */
+  researchAvailable: boolean;
 }) {
   const router = useRouter();
   const sessionId = detail?.id ?? null;
@@ -76,6 +80,11 @@ export function WorkSessionView({
   const [model, setModel] = React.useState(detail?.model ?? "opus");
   const [aspectRatio, setAspectRatio] = React.useState<string | null>(
     detail?.aspectRatio ?? null,
+  );
+  // Per-message, but it opens on whatever the last turn used so a session that
+  // is doing research keeps doing it without re-picking every time.
+  const [researchMode, setResearchMode] = React.useState<ResearchMode>(
+    detail?.researchMode ?? "AUTO",
   );
 
   const stream = useWorkStream(runId);
@@ -180,9 +189,18 @@ export function WorkSessionView({
     router.refresh();
   }
 
-  async function submit(text: string, mentions: WorkMention[]) {
+  async function submit(
+    text: string,
+    mentions: WorkMention[],
+    research: ResearchMode,
+  ) {
     if (!sessionId || busy) return;
-    const res = await sendWorkMessage({ sessionId, text, mentions });
+    const res = await sendWorkMessage({
+      sessionId,
+      text,
+      mentions,
+      researchMode: research,
+    });
     setPending((prev) => [
       ...prev,
       {
@@ -249,6 +267,9 @@ export function WorkSessionView({
         busy={busy}
         aspectRatio={aspectRatio}
         onAspectRatioChange={changeAspectRatio}
+        researchMode={researchMode}
+        onResearchModeChange={setResearchMode}
+        researchAvailable={researchAvailable}
         railHidden={railHidden}
         canvasHidden={canvasHidden}
         onShowRail={onShowRail}

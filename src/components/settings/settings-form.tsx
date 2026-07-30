@@ -44,6 +44,7 @@ export function SettingsForm({
     codexModel: string;
     codexReasoningEffort: string;
     pexelsApiKey: string;
+    tavilyApiKey: string;
   };
   apiKeyPresent: boolean;
   codexAuthPresent: boolean;
@@ -55,6 +56,7 @@ export function SettingsForm({
     initial.codexReasoningEffort,
   );
   const [pexelsApiKey, setPexelsApiKey] = React.useState(initial.pexelsApiKey);
+  const [tavilyApiKey, setTavilyApiKey] = React.useState(initial.tavilyApiKey);
   const [state, setState] = React.useState<"idle" | "saving" | "saved">("idle");
 
   async function save() {
@@ -65,6 +67,7 @@ export function SettingsForm({
       codexModel,
       codexReasoningEffort: codexEffort,
       pexelsApiKey: pexelsApiKey.trim(),
+      tavilyApiKey: tavilyApiKey.trim(),
     });
     setState("saved");
     setTimeout(() => setState("idle"), 1500);
@@ -205,6 +208,36 @@ export function SettingsForm({
               value={pexelsApiKey}
               onChange={(e) => setPexelsApiKey(e.target.value)}
               placeholder="Paste your Pexels API key"
+              autoComplete="off"
+              className="max-w-lg font-mono"
+            />
+          </Field>
+        </CardContent>
+      </Card>
+
+      {/* Tavily */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Tavily</CardTitle>
+          <CardDescription>
+            Web research, so the agent checks a fact instead of inventing it. Get
+            a key at tavily.com.
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Field
+            label="API key"
+            hint={
+              tavilyApiKey.trim()
+                ? "Research is available. Each workflow, campaign and chat message sets its own on / auto / off."
+                : "Empty — the web tools stay hidden from every agent until a key is saved."
+            }
+          >
+            <Input
+              type="password"
+              value={tavilyApiKey}
+              onChange={(e) => setTavilyApiKey(e.target.value)}
+              placeholder="Paste your Tavily API key"
               autoComplete="off"
               className="max-w-lg font-mono"
             />

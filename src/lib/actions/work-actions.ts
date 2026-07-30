@@ -209,6 +209,7 @@ export async function sendWorkMessage(input: unknown) {
       sessionId: session.id,
       text: data.text,
       mentions: data.mentions,
+      researchMode: data.researchMode,
       taskRunId: run.id,
     },
   });

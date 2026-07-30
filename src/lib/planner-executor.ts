@@ -10,6 +10,8 @@ import {
   type ToolDef,
 } from "@/lib/run-tools";
 import { PLANNER_TOOLS, type PlannerToolContext } from "@/lib/planner-tools";
+import { RESEARCH_TOOLS } from "@/lib/research-tools";
+import { isTavilyConfigured } from "@/lib/tavily";
 import { buildPlannerPrompt } from "@/lib/planner-prompt";
 import { runClaudeAgent } from "@/lib/claude-backend";
 import { runCodexAgent } from "@/lib/codex-backend";
@@ -52,6 +54,13 @@ export async function executePlannerRun(planRunId: string): Promise<void> {
     claudeDefault: settings.defaultModel,
     codexDefault: settings.codexModel,
   });
+
+  // Web research. Null hides the tools completely — they never reach allowedTools
+  // or the MCP tools/list, so the planner cannot burn a turn on a call that fails.
+  const research =
+    campaign.researchMode !== "OFF" && (await isTavilyConfigured())
+      ? campaign.researchMode
+      : null;
 
   // The planner reads an uploaded brief off disk, so the campaign folder is
   // staged locally the same way a render run stages its assets. On the local
@@ -100,6 +109,7 @@ export async function executePlannerRun(planRunId: string): Promise<void> {
       ? path.join(cwd, path.basename(campaign.briefRelPath))
       : null,
     scope: planRun.scope as "full" | "reroll" | "add",
+    research,
     existingItems: campaign.items.map((i) => ({
       dayIndex: i.dayIndex,
       slotIndex: i.slotIndex,
@@ -131,12 +141,18 @@ export async function executePlannerRun(planRunId: string): Promise<void> {
     });
   };
 
+  // Research arrives as MCP tools, so the planner's base tool set stays Read-only.
+  const tools = [
+    ...(PLANNER_TOOLS as unknown as ToolDef<unknown>[]),
+    ...(research ? RESEARCH_TOOLS : []),
+  ];
+
   const shared = {
     prompt,
     model,
     cwd,
     additionalDirectories: [cwd],
-    tools: PLANNER_TOOLS as unknown as ToolDef<unknown>[],
+    tools,
     toolContext,
     abortController: new AbortController(),
     record,
@@ -144,7 +160,7 @@ export async function executePlannerRun(planRunId: string): Promise<void> {
   };
 
   const mcpToken =
-    provider === "CODEX" ? registerToolContext(toolContext, PLANNER_TOOLS) : null;
+    provider === "CODEX" ? registerToolContext(toolContext, tools) : null;
 
   try {
     const result =

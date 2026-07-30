@@ -1,4 +1,6 @@
 import type { AgentProvider } from "@/generated/prisma/enums";
+import { researchDirective } from "@/lib/research-tools";
+import type { ResearchMode } from "@/lib/research";
 
 interface AssetForPrompt {
   filename: string;
@@ -50,6 +52,8 @@ export function buildRunPrompt(input: {
   fonts: FontForPrompt[];
   pairings: PairingForPrompt[];
   skills: SkillForPrompt[];
+  /** Null when the web tools are not registered for this run. */
+  research: ResearchMode | null;
 }): string {
   const {
     provider,
@@ -67,7 +71,19 @@ export function buildRunPrompt(input: {
     fonts,
     pairings,
     skills,
+    research,
   } = input;
+
+  const directive = researchDirective(research);
+  const researchBlock = directive
+    ? `\n=== RESEARCH ===
+You can look things up with "web_search" and "web_extract".
+${directive}
+`
+    : "";
+  // The research step only exists when the tools do, so the procedure renumbers
+  // around it rather than leaving a dead instruction in the prompt.
+  const step = (n: number) => (directive ? n + 1 : n);
 
   const globalManifest =
     globalAssets.length > 0
@@ -168,7 +184,7 @@ These fonts are pre-loaded — just use them in CSS via font-family; do NOT
 @font-face them yourself, the renderer injects the faces for you. Pick fonts
 that fit the mood of the content and the workflow instruction.
 ${fontList}${pairingList}
-${skillsBlock}
+${skillsBlock}${researchBlock}
 === CONTENT-ONLY RULE (important) ===
 The image shows ONLY audience-facing content. Never render production or campaign
 metadata onto the image, including:
@@ -184,13 +200,18 @@ branding as a deliberate design element.
 
 === HOW TO WORK ===
 1. PLAN FIRST. Work out how many images the task needs and what each one says
-   before building anything.
-2. DECIDE, PER IMAGE, WHETHER IT NEEDS A PHOTO AT ALL. A quote card, a statistic,
+   before building anything.${
+     directive
+       ? `\n2. RESEARCH THE SUBJECT, per the RESEARCH section above, before you commit to
+   what each image says. Facts get checked here, not invented later.`
+       : ""
+   }
+${step(2)}. DECIDE, PER IMAGE, WHETHER IT NEEDS A PHOTO AT ALL. A quote card, a statistic,
    a section break, a definition, a text-led hook — these are usually stronger as
    pure typography on a flat or gradient ground. Do not reach for a photo to fill
    space, and do not put one behind text that then needs a scrim to stay legible.
    A photo earns its place when it shows something the words cannot.
-3. Only when an image genuinely needs one, source it in this order and stop at
+${step(3)}. Only when an image genuinely needs one, source it in this order and stop at
    the first good fit:
    a. "search_assets" — the source folder and global assets above, matched on
       their descriptions rather than their filenames;
@@ -198,17 +219,17 @@ branding as a deliberate design element.
       when nothing local fits. Import just the ones you will actually place;
       each becomes a permanent asset in this task's folder. Never invent a URL —
       pass back exactly what search_stock returned.
-4. Inspect whatever you chose (use the ${provider === "CODEX" ? "view_image" : "Read"} tool on its path) so overlays fit
+${step(4)}. Inspect whatever you chose (use the ${provider === "CODEX" ? "view_image" : "Read"} tool on its path) so overlays fit
    the actual composition.
-5. For EACH final image, build a complete self-contained HTML document. Embed
+${step(5)}. For EACH final image, build a complete self-contained HTML document. Embed
    the source photo as the background using its absolute file:// path
    (e.g. <img src="file://${assetDirAbs ?? "/path"}/photo.png">) or a data URI.
    Inline all CSS. Use the AVAILABLE FONTS above (by font-family name) to match
    the mood — fall back to system fonts only if none fit.
-6. Call the "render_html_to_png" tool with that HTML to export the PNG. Choose a
+${step(6)}. Call the "render_html_to_png" tool with that HTML to export the PNG. Choose a
    width/height that matches the intended ${platform} format (e.g. 1080x1080
    square, 1080x1350 portrait, 1080x1920 story).
-7. Give each output a clear, ordered filename (e.g. "01-hook.png", "02-tip.png").
+${step(7)}. Give each output a clear, ordered filename (e.g. "01-hook.png", "02-tip.png").
 
 === OUTPUT CONTRACT ===
 - Write ALL final PNGs into this run's output folder: ${outDirAbs}

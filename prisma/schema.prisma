@@ -38,6 +38,15 @@ enum ClaudeAuthMode {
   API_KEY
 }
 
+// How hard an agent is pushed to research before it writes. OFF hides the web
+// tools entirely; AUTO requires research only for factual claims; ON requires at
+// least one search on every request.
+enum ResearchMode {
+  OFF
+  AUTO
+  ON
+}
+
 model AppSetting {
   id             String         @id @default("singleton")
   provider       AgentProvider  @default(CLAUDE)
@@ -49,6 +58,9 @@ model AppSetting {
   // Pexels stock-photo integration. Empty = feature disabled (the Pexels tab in
   // the asset picker stays locked until a key is saved here).
   pexelsApiKey   String         @default("")
+  // Tavily web-research integration. Empty = feature disabled (the web tools are
+  // never registered, so no agent sees them).
+  tavilyApiKey   String         @default("")
   assetsRoot     String         @default("data/assets")
   tasksRoot      String         @default("data/tasks")
   updatedAt      DateTime       @updatedAt
@@ -66,6 +78,8 @@ model Workflow {
   description       String?
   globalInstruction String   @default("")
   defaultModel      String?
+  // Web research for this workflow's render runs.
+  researchMode      ResearchMode @default(AUTO)
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
@@ -374,6 +388,9 @@ model Campaign {
   provider AgentProvider?
   model    String?
 
+  // Web research for this campaign's planner run.
+  researchMode ResearchMode @default(AUTO)
+
   // Schedule params, captured at approve time.
   startDate    DateTime?
   durationDays Int?     // <= 7, enforced in validation + action
@@ -563,6 +580,9 @@ model WorkMessage {
   text String
   // [{ name, assetId, relPath }] — the images this turn pointed at with @.
   mentions Json?
+  // Web research for this turn only. Null on rows written before the setting
+  // existed, read as AUTO.
+  researchMode ResearchMode?
 
   taskRunId String?
   taskRun   TaskRun? @relation(fields: [taskRunId], references: [id], onDelete: SetNull)

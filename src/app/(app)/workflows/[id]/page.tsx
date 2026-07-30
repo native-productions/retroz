@@ -10,6 +10,7 @@ import { WorkflowSkillsTab } from "@/components/skill/workflow-skills-tab";
 import { TasksTab } from "@/components/task/tasks-tab";
 import { CampaignsTab } from "@/components/campaign/campaigns-tab";
 import { ScheduleTab } from "@/components/schedule/schedule-tab";
+import { isTavilyConfigured } from "@/lib/tavily";
 
 export const dynamic = "force-dynamic";
 
@@ -36,6 +37,8 @@ export default async function WorkflowDetailPage({
     },
   });
   if (!workflow) notFound();
+
+  const researchAvailable = await isTavilyConfigured();
 
   return (
     <>
@@ -66,6 +69,8 @@ export default async function WorkflowDetailPage({
               workflowName={workflow.name}
               initialInstruction={workflow.globalInstruction}
               initialModel={workflow.defaultModel}
+              initialResearchMode={workflow.researchMode}
+              researchAvailable={researchAvailable}
             />
           }
           assets={<AssetsTab workflowId={workflow.id} />}

@@ -22,6 +22,7 @@ export async function updateSettings(input: unknown) {
       codexModel: data.codexModel,
       codexReasoningEffort: data.codexReasoningEffort,
       pexelsApiKey: data.pexelsApiKey,
+      tavilyApiKey: data.tavilyApiKey,
     },
   });
   revalidatePath("/settings");

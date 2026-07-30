@@ -13,6 +13,7 @@ import { removeTaskOutputs } from "@/lib/task-outputs";
 import { zonedInstant } from "@/lib/campaign-time";
 import {
   campaignCreateSchema,
+  campaignUpdateSchema,
   campaignItemUpdateSchema,
   campaignItemAddSchema,
   campaignAssignAssetsSchema,
@@ -264,6 +265,15 @@ export async function setAssetRequestFulfilled(id: string, fulfilled: boolean) {
     }
   }
   revalidatePath(`/campaigns/${req.campaignId}`);
+}
+
+export async function updateCampaign(input: unknown) {
+  const data = campaignUpdateSchema.parse(input);
+  await db.campaign.update({
+    where: { id: data.id },
+    data: { researchMode: data.researchMode },
+  });
+  revalidatePath(`/campaigns/${data.id}`);
 }
 
 export async function cancelCampaign(id: string) {

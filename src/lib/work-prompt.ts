@@ -1,4 +1,6 @@
 import type { AgentProvider } from "@/generated/prisma/enums";
+import { researchDirective } from "@/lib/research-tools";
+import type { ResearchMode } from "@/lib/research";
 
 // Prompts for the Work playground. Unlike a task run — one instruction, one
 // batch of images, done — Work is a conversation: the first turn establishes the
@@ -47,6 +49,17 @@ ${skills
 `;
 }
 
+/** Research is a per-turn toggle, so this block is restated on every turn — see
+ *  the note on buildWorkTurnPrompt. Empty when the web tools are not registered. */
+export function researchBlock(research: ResearchMode | null): string {
+  const directive = researchDirective(research);
+  if (!directive) return "";
+  return `\n=== RESEARCH (this message) ===
+You can look things up with "web_search" and "web_extract".
+${directive}
+`;
+}
+
 export interface WorkPromptInput {
   provider: AgentProvider;
   workflowName: string;
@@ -66,6 +79,8 @@ export interface WorkPromptInput {
   inlinedSkills: InlinedSkill[];
   /** Size constraint from the session's locked aspect ratio, "" when free. */
   aspectRule: string;
+  /** Null when the web tools are not registered for this turn. */
+  research: ResearchMode | null;
   message: string;
 }
 
@@ -106,8 +121,14 @@ export function buildWorkPrompt(input: WorkPromptInput): string {
     skills,
     inlinedSkills,
     aspectRule,
+    research,
     message,
   } = input;
+
+  // The research step only exists when the tools do, so the procedure renumbers
+  // around it rather than leaving a dead instruction in the prompt.
+  const researching = Boolean(researchDirective(research));
+  const step = (n: number) => (researching ? n + 1 : n);
 
   const fontList =
     fonts.length > 0
@@ -174,7 +195,7 @@ ${mentionBlock(mentioned)}${availableBlock}
 These fonts are pre-loaded — use them in CSS via font-family; do NOT @font-face
 them yourself, the renderer injects the faces for you.
 ${fontList}${pairingList}
-${skillsBlock}${inlinedSkillBlock(inlinedSkills)}
+${skillsBlock}${inlinedSkillBlock(inlinedSkills)}${researchBlock(research)}
 === CONTENT-ONLY RULE ===
 The image shows ONLY audience-facing content. Never render production metadata
 (day/slot counters, series labels, angle tags like "HOOK"/"CTA") unless the user
@@ -184,13 +205,18 @@ explicitly asks for it as a design element.
 1. PLAN FIRST. If the request needs more than one step or produces more than one
    image, open with the TodoWrite tool and keep it updated as you go — the user
    watches it as the plan for the current request. Keep it short and concrete. A
-   single-image tweak needs no todo list.
-2. DECIDE, PER IMAGE, WHETHER IT NEEDS A PHOTO AT ALL. A quote card, a statistic,
+   single-image tweak needs no todo list.${
+     researching
+       ? `\n2. RESEARCH THE SUBJECT, per the RESEARCH section above, before you commit to
+   what each image says. Facts get checked here, not invented later.`
+       : ""
+   }
+${step(2)}. DECIDE, PER IMAGE, WHETHER IT NEEDS A PHOTO AT ALL. A quote card, a statistic,
    a section break, a definition, a text-led hook — these are usually stronger as
    pure typography on a flat or gradient ground. Do not reach for a photo to fill
    space, and do not put one behind text that then needs a scrim to stay legible.
    A photo earns its place when it shows something the words cannot.
-3. Only when an image genuinely needs one, source it in this order and stop at
+${step(3)}. Only when an image genuinely needs one, source it in this order and stop at
    the first good fit:
    a. the images this message pointed at with @ — always these first;
    b. "search_assets" — the project library and brand assets. They carry
@@ -200,16 +226,16 @@ explicitly asks for it as a design element.
       when nothing local fits. Import just the ones you will actually place;
       each becomes a permanent asset the user sees. Never invent a URL — pass
       back exactly what search_stock returned.
-4. Inspect whatever you chose (use the ${provider === "CODEX" ? "view_image" : "Read"} tool on its path) before designing
+${step(4)}. Inspect whatever you chose (use the ${provider === "CODEX" ? "view_image" : "Read"} tool on its path) before designing
    over it, so the overlay fits the real composition.
-5. For EACH final image, build a complete self-contained HTML document. Embed the
+${step(5)}. For EACH final image, build a complete self-contained HTML document. Embed the
    photo as the background via its absolute file:// path or a data URI, inline
    all CSS, and use the fonts above.
-6. Call "render_html_to_png" to export it. ${
+${step(6)}. Call "render_html_to_png" to export it. ${
     aspectRule ||
     `Pick a size that fits the intended ${platform} format (1080x1080 square, 1080x1350 portrait, 1080x1920 story).`
   }
-7. Give each image a clear, ordered filename ("01-hook.png"). Re-rendering the
+${step(7)}. Give each image a clear, ordered filename ("01-hook.png"). Re-rendering the
    same filename replaces that image — do that when the user asks for a revision,
    and use a new filename for a genuinely new image.
 
@@ -226,9 +252,10 @@ ${message}`;
 }
 
 /**
- * Later turns: the engine session already holds the context. The size rule is
- * restated anyway — it is a per-turn setting the user can change mid-session,
- * and the opening prompt's version would otherwise be the one that sticks.
+ * Later turns: the engine session already holds the context. The size and
+ * research rules are restated anyway — they are per-turn settings the user can
+ * change mid-session, and the opening prompt's version would otherwise be the one
+ * that sticks.
  */
 export function buildWorkTurnPrompt(input: {
   mentioned: WorkAsset[];
@@ -236,6 +263,7 @@ export function buildWorkTurnPrompt(input: {
   /** Set only when the brief changed since the last turn — see work-executor. */
   revisedBrief: { projectName: string; instruction: string } | null;
   aspectRule: string;
+  research: ResearchMode | null;
   message: string;
 }): string {
   // The opening prompt is what the resumed engine session still holds, so an
@@ -249,8 +277,16 @@ ${input.revisedBrief.instruction || "(the brief was cleared — fall back on the
 `
     : "";
   const size = input.aspectRule ? `\n=== SIZE ===\n${input.aspectRule}\n` : "";
+  // A resumed session still holds whatever research rule it opened with, so
+  // turning research off has to be said out loud rather than merely omitted.
+  const research =
+    researchBlock(input.research) ||
+    `\n=== RESEARCH (this message) ===
+Web research is off for this message. Do not call "web_search" or "web_extract",
+whatever earlier turns said.
+`;
   return `${mentionBlock(input.mentioned)}${brief}${inlinedSkillBlock(
     input.inlinedSkills,
-  )}${size}
+  )}${research}${size}
 ${input.message}`.trim();
 }

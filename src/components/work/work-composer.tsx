@@ -17,7 +17,9 @@ import {
   WorkTriggerMenu,
   type MentionAnchor,
 } from "@/components/work/work-mention-menu";
+import { WorkResearchPicker } from "@/components/work/work-research-picker";
 import { ASPECT_RATIOS, findAspectRatio } from "@/lib/aspect-ratios";
+import type { ResearchMode } from "@/lib/research";
 import type {
   WorkAttachment,
   WorkMention,
@@ -182,12 +184,20 @@ export const WorkComposer = React.forwardRef<
     onRemoveAttachment: (id: string) => void;
     onSearchMentions: (query: string) => Promise<WorkAttachment[]>;
     onSearchSkills: (query: string) => Promise<WorkSkillOption[]>;
-    onSubmit: (text: string, mentions: WorkMention[]) => void;
+    onSubmit: (
+      text: string,
+      mentions: WorkMention[],
+      researchMode: ResearchMode,
+    ) => void;
     onStop?: () => void;
     busy?: boolean;
     /** Locked render shape for this session; null lets the agent choose. */
     aspectRatio: string | null;
     onAspectRatioChange: (id: string | null) => void;
+    /** Per-message research choice. Hidden when no Tavily key is saved. */
+    researchMode: ResearchMode;
+    onResearchModeChange: (mode: ResearchMode) => void;
+    researchAvailable: boolean;
   }
 >(function WorkComposer(
   {
@@ -203,6 +213,9 @@ export const WorkComposer = React.forwardRef<
     busy = false,
     aspectRatio,
     onAspectRatioChange,
+    researchMode,
+    onResearchModeChange,
+    researchAvailable,
   },
   ref,
 ) {
@@ -379,7 +392,7 @@ export const WorkComposer = React.forwardRef<
     draftsRef.current[sessionId] = "";
     setTrigger(null);
     setEmpty(true);
-    onSubmit(text, mentions);
+    onSubmit(text, mentions, researchMode);
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
@@ -558,6 +571,12 @@ export const WorkComposer = React.forwardRef<
               value={aspectRatio}
               onChange={onAspectRatioChange}
             />
+            {researchAvailable ? (
+              <WorkResearchPicker
+                value={researchMode}
+                onChange={onResearchModeChange}
+              />
+            ) : null}
             <p className="hidden font-mono text-[10px] uppercase tracking-[0.08em] text-fg-muted/70 lg:block">
               ⌘V image · @ image · / skill · ⏎ send
             </p>

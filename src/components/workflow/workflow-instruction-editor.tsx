@@ -14,6 +14,13 @@ import {
   SelectItem,
 } from "@/components/ui/ui-select";
 import { ModelSelectOptions } from "@/components/model-select-options";
+import {
+  RESEARCH_MODES,
+  RESEARCH_LABELS,
+  RESEARCH_HINTS,
+  RESEARCH_LOCKED_HINT,
+  type ResearchMode,
+} from "@/lib/research";
 import { updateWorkflow, deleteWorkflow } from "@/lib/actions/workflow-actions";
 
 export function WorkflowInstructionEditor({
@@ -21,14 +28,22 @@ export function WorkflowInstructionEditor({
   workflowName,
   initialInstruction,
   initialModel,
+  initialResearchMode,
+  researchAvailable,
 }: {
   workflowId: string;
   workflowName: string;
   initialInstruction: string;
   initialModel: string | null;
+  initialResearchMode: ResearchMode;
+  /** False when no Tavily key is saved — the picker locks. */
+  researchAvailable: boolean;
 }) {
   const [instruction, setInstruction] = React.useState(initialInstruction);
   const [model, setModel] = React.useState<string>(initialModel ?? "default");
+  const [research, setResearch] = React.useState<ResearchMode>(
+    initialResearchMode,
+  );
   const [state, setState] = React.useState<"idle" | "saving" | "saved">("idle");
 
   async function save() {
@@ -37,6 +52,7 @@ export function WorkflowInstructionEditor({
       id: workflowId,
       globalInstruction: instruction,
       defaultModel: model === "default" ? null : model,
+      researchMode: research,
     });
     setState("saved");
     setTimeout(() => setState("idle"), 1600);
@@ -56,6 +72,31 @@ export function WorkflowInstructionEditor({
           }
           className="min-h-56"
         />
+      </Field>
+
+      <Field
+        label="Web research"
+        hint={
+          researchAvailable ? RESEARCH_HINTS[research] : RESEARCH_LOCKED_HINT
+        }
+        className="w-72"
+      >
+        <Select
+          value={research}
+          onValueChange={(v) => setResearch(v as ResearchMode)}
+          disabled={!researchAvailable}
+        >
+          <SelectTrigger>
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {RESEARCH_MODES.map((m) => (
+              <SelectItem key={m} value={m}>
+                {RESEARCH_LABELS[m]}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </Field>
 
       <div className="flex flex-wrap items-end gap-4">

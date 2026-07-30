@@ -16,6 +16,7 @@ import {
   WorkComposer,
   type WorkComposerHandle,
 } from "@/components/work/work-composer";
+import type { ResearchMode } from "@/lib/research";
 import type {
   WorkAttachment,
   WorkMention,
@@ -52,6 +53,9 @@ export function WorkConversation({
   busy,
   aspectRatio,
   onAspectRatioChange,
+  researchMode,
+  onResearchModeChange,
+  researchAvailable,
   railHidden,
   canvasHidden,
   onShowRail,
@@ -72,11 +76,18 @@ export function WorkConversation({
   onRemoveAttachment: (id: string) => void;
   onSearchMentions: (query: string) => Promise<WorkAttachment[]>;
   onSearchSkills: (query: string) => Promise<WorkSkillOption[]>;
-  onSubmit: (text: string, mentions: WorkMention[]) => void;
+  onSubmit: (
+    text: string,
+    mentions: WorkMention[],
+    researchMode: ResearchMode,
+  ) => void;
   onStop: () => void;
   busy: boolean;
   aspectRatio: string | null;
   onAspectRatioChange: (id: string | null) => void;
+  researchMode: ResearchMode;
+  onResearchModeChange: (mode: ResearchMode) => void;
+  researchAvailable: boolean;
   railHidden: boolean;
   canvasHidden: boolean;
   onShowRail: () => void;
@@ -188,6 +199,9 @@ export function WorkConversation({
             busy={busy}
             aspectRatio={aspectRatio}
             onAspectRatioChange={onAspectRatioChange}
+            researchMode={researchMode}
+            onResearchModeChange={onResearchModeChange}
+            researchAvailable={researchAvailable}
           />
         </div>
       ) : null}

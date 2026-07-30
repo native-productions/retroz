@@ -6,6 +6,7 @@ import {
   listWorkSessions,
   listWorkflowOptions,
 } from "@/lib/work-queries";
+import { isTavilyConfigured } from "@/lib/tavily";
 
 /**
  * Server half of the Work page: loads the rail, the open session, and the
@@ -13,10 +14,11 @@ import {
  * Shared by `/work` and `/work/[sessionId]` so both routes stay one-liners.
  */
 export async function WorkPage({ sessionId }: { sessionId?: string }) {
-  const [projects, sessions, workflows] = await Promise.all([
+  const [projects, sessions, workflows, researchAvailable] = await Promise.all([
     listWorkProjects(),
     listWorkSessions(),
     listWorkflowOptions(),
+    isTavilyConfigured(),
   ]);
 
   const detail = sessionId ? await getWorkSessionDetail(sessionId) : null;
@@ -33,6 +35,7 @@ export async function WorkPage({ sessionId }: { sessionId?: string }) {
       workflows={workflows}
       bundles={bundles}
       detail={detail}
+      researchAvailable={researchAvailable}
     />
   );
 }

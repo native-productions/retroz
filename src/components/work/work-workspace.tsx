@@ -55,6 +55,7 @@ export function WorkWorkspace({
   workflows,
   bundles,
   detail,
+  researchAvailable,
 }: {
   projects: WorkProject[];
   sessions: WorkSession[];
@@ -62,6 +63,8 @@ export function WorkWorkspace({
   /** Bundles of the open session's project, for the canvas's collect action. */
   bundles: WorkBundleSummary[];
   detail: WorkSessionDetail | null;
+  /** False when no Tavily key is saved — the composer hides the picker. */
+  researchAvailable: boolean;
 }) {
   const router = useRouter();
   const [projectDialog, setProjectDialog] = React.useState(false);
@@ -175,6 +178,7 @@ export function WorkWorkspace({
           onHideCanvas={() => togglePanel("canvas", true)}
           onNewProject={() => setProjectDialog(true)}
           onNewSession={newSession}
+          researchAvailable={researchAvailable}
         />
       </div>
 

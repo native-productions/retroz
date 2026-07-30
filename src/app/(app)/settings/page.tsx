@@ -27,6 +27,7 @@ export default async function SettingsPage() {
             codexModel: settings.codexModel,
             codexReasoningEffort: settings.codexReasoningEffort,
             pexelsApiKey: settings.pexelsApiKey,
+            tavilyApiKey: settings.tavilyApiKey,
           }}
           apiKeyPresent={apiKeyPresent}
           codexAuthPresent={codexAuthPresent}

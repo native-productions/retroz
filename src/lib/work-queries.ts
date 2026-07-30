@@ -6,6 +6,7 @@ import {
   timeLabel,
   type WorkEvent,
 } from "@/lib/work-events";
+import type { ResearchMode } from "@/lib/research";
 import type {
   WorkAccent,
   WorkAttachment,
@@ -141,6 +142,9 @@ export interface WorkSessionDetail {
   model: string | null;
   /** Locked render shape, null when the agent picks per image. */
   aspectRatio: string | null;
+  /** Research choice of the last turn — the composer reopens on it, so the
+   *  setting feels sticky without being a session-level column. */
+  researchMode: ResearchMode;
   status: WorkSessionStatus;
   /** The turn still in flight, if any — the client streams this one. */
   liveRunId: string | null;
@@ -231,6 +235,8 @@ export async function getWorkSessionDetail(
     title: session.title,
     model: session.model,
     aspectRatio: session.aspectRatio,
+    researchMode:
+      session.messages.at(-1)?.researchMode ?? ("AUTO" as ResearchMode),
     status: statusOfRun(lastRun?.status),
     liveRunId: liveRun?.id ?? null,
     messages,

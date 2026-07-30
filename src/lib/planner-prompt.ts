@@ -1,4 +1,6 @@
 import type { AgentProvider } from "@/generated/prisma/enums";
+import { researchDirective } from "@/lib/research-tools";
+import type { ResearchMode } from "@/lib/research";
 
 interface ExistingItemForPrompt {
   dayIndex: number;
@@ -18,6 +20,8 @@ export interface PlannerPromptInput {
   /** Absolute path of an uploaded brief file the planner may Read (e.g. a PDF). */
   briefFileAbs: string | null;
   scope: "full" | "reroll" | "add";
+  /** Null when the web tools are not registered for this run. */
+  research: ResearchMode | null;
   existingItems: ExistingItemForPrompt[];
   /** For reroll: the item being regenerated. */
   targetItem?: ExistingItemForPrompt;
@@ -40,6 +44,7 @@ export function buildPlannerPrompt(input: PlannerPromptInput): string {
     briefText,
     briefFileAbs,
     scope,
+    research,
     existingItems,
     targetItem,
   } = input;
@@ -109,6 +114,17 @@ export function buildPlannerPrompt(input: PlannerPromptInput): string {
   }
   if (!briefText.trim() && !briefFileAbs) {
     lines.push("(No brief text provided — infer a sensible campaign from the workflow rules.)", "");
+  }
+
+  const directive = researchDirective(research);
+  if (directive) {
+    lines.push(
+      "## Research",
+      'You can look things up with "web_search" and "web_extract". A calendar built',
+      "from memory alone is how invented statistics reach the feed.",
+      directive,
+      "",
+    );
   }
 
   if (existingItems.length > 0 && scope !== "full") {

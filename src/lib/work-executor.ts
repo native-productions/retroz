@@ -10,12 +10,14 @@ import { ensureProjectAssetFolderRow } from "@/lib/project-assets";
 import { emitRunEvent, type RunBusEvent } from "@/lib/run-bus";
 import {
   RUN_TOOLS,
-  registerRunToolContext,
+  registerToolContext,
   releaseRunToolContext,
   type RunToolAsset,
   type RunToolContext,
   type ToolDef,
 } from "@/lib/run-tools";
+import { RESEARCH_TOOLS } from "@/lib/research-tools";
+import { isTavilyConfigured } from "@/lib/tavily";
 import {
   registerRunController,
   releaseRunController,
@@ -85,6 +87,14 @@ export async function executeWorkTurn(taskRunId: string): Promise<void> {
     (m) => m.taskRunId && m.taskRunId !== taskRunId,
   );
   const mentions = (message?.mentions as StoredMention[] | null) ?? [];
+
+  // Research is a per-turn choice made in the composer. Null hides the web tools
+  // completely; rows written before the setting existed read as AUTO.
+  const requestedResearch = message?.researchMode ?? "AUTO";
+  const research =
+    requestedResearch !== "OFF" && (await isTavilyConfigured())
+      ? requestedResearch
+      : null;
 
   // One folder per session, so renders accumulate as the conversation goes. The
   // first turn names it; later turns reuse whatever that run recorded.
@@ -347,6 +357,7 @@ export async function executeWorkTurn(taskRunId: string): Promise<void> {
         : [],
     inlinedSkills,
     aspectRule,
+    research,
     message: message?.text ?? "",
   });
 
@@ -372,6 +383,7 @@ export async function executeWorkTurn(taskRunId: string): Promise<void> {
       ? { projectName: project.name, instruction: project.instruction }
       : null,
     aspectRule,
+    research,
     message: message?.text ?? "",
   });
 
@@ -399,8 +411,13 @@ export async function executeWorkTurn(taskRunId: string): Promise<void> {
   const abortController = new AbortController();
   registerRunController(taskRunId, abortController);
 
+  const tools = [
+    ...(RUN_TOOLS as unknown as ToolDef<unknown>[]),
+    ...(research ? RESEARCH_TOOLS : []),
+  ];
+
   const mcpToken =
-    provider === "CODEX" ? registerRunToolContext(toolContext) : null;
+    provider === "CODEX" ? registerToolContext(toolContext, tools) : null;
 
   async function launch(resume: string | null): Promise<AgentRunResult> {
     const shared = {
@@ -408,7 +425,7 @@ export async function executeWorkTurn(taskRunId: string): Promise<void> {
       model,
       cwd: outDirAbs,
       additionalDirectories: [outDirAbs],
-      tools: RUN_TOOLS as unknown as ToolDef<unknown>[],
+      tools,
       toolContext,
       baseTools: WORK_BASE_TOOLS,
       abortController,

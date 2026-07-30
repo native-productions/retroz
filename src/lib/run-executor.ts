@@ -9,11 +9,13 @@ import { rankAssets } from "@/lib/asset-ranker";
 import { emitRunEvent, type RunBusEvent } from "@/lib/run-bus";
 import {
   RUN_TOOLS,
-  registerRunToolContext,
+  registerToolContext,
   releaseRunToolContext,
   type RunToolContext,
 } from "@/lib/run-tools";
 import type { ToolDef } from "@/lib/run-tools";
+import { RESEARCH_TOOLS } from "@/lib/research-tools";
+import { isTavilyConfigured } from "@/lib/tavily";
 import {
   registerRunController,
   releaseRunController,
@@ -58,6 +60,13 @@ export async function executeRun(taskRunId: string): Promise<void> {
     claudeDefault: settings.defaultModel,
     codexDefault: settings.codexModel,
   });
+
+  // Web research. Null hides the tools completely — they never reach allowedTools
+  // or the MCP tools/list, so the agent cannot burn a turn on a call that fails.
+  const research =
+    task.workflow.researchMode !== "OFF" && (await isTavilyConfigured())
+      ? task.workflow.researchMode
+      : null;
 
   // --- output prefix: data/tasks/<workflow>/<task-name>-<YYYY-MM-DD>-<HHmm> ---
   const tasksPrefix = toRelative(
@@ -222,6 +231,7 @@ export async function executeRun(taskRunId: string): Promise<void> {
     fonts: fontsForPrompt,
     pairings,
     skills: skillsForPrompt,
+    research,
   });
 
   const toolContext: RunToolContext = {
@@ -257,12 +267,17 @@ export async function executeRun(taskRunId: string): Promise<void> {
   const abortController = new AbortController();
   registerRunController(taskRunId, abortController);
 
+  const tools = [
+    ...(RUN_TOOLS as unknown as ToolDef<unknown>[]),
+    ...(research ? RESEARCH_TOOLS : []),
+  ];
+
   const shared = {
     prompt,
     model,
     cwd: outDirAbs,
     additionalDirectories,
-    tools: RUN_TOOLS as unknown as ToolDef<unknown>[],
+    tools,
     toolContext,
     abortController,
     record,
@@ -270,7 +285,8 @@ export async function executeRun(taskRunId: string): Promise<void> {
   };
 
   // Codex runs out-of-process, so its retroz tools are served over HTTP.
-  const mcpToken = provider === "CODEX" ? registerRunToolContext(toolContext) : null;
+  const mcpToken =
+    provider === "CODEX" ? registerToolContext(toolContext, tools) : null;
 
   try {
     const result =
