@@ -72,6 +72,8 @@ src/
     run-tools.ts        shared retroz tool defs (render/list/search) + per-run
                         token registry for the HTTP MCP route
     png-compositor.ts   Playwright HTML→PNG (renders via file:// temp html)
+    render-revision.ts  stages a finished render for editing: its stored HTML
+                        (RenderSource) + PNG on disk, photo paths rehomed
     prompt-builder.ts   assembles the run prompt (instruction + assets + fonts)
     run-queue.ts        p-queue, concurrency 1 (never 2 agent spawns at once)
     run-bus.ts          in-process pub/sub for live SSE
@@ -155,6 +157,12 @@ data/                   assets + task outputs + fonts (gitignored)
   `middleware.ts`.
 - Google Fonts download keeps the **latin** unicode-range subset (covers en/id).
 - Rendered PNGs are **2× the requested logical size** (deviceScaleFactor 2).
+- A stored `RenderSource.html` holds **absolute paths from a dead run workspace**.
+  Never re-render one as-is — `rehomeImagePaths` must remap it onto the current
+  run's asset copies first, or every photo silently fails to load.
+- `RenderSource` is a **separate table on purpose**: `artifacts` is read with no
+  `select` in the run viewer, gallery, and Work session queries, so an HTML column
+  on `RunArtifact` would drag whole documents through every thumbnail render.
 
 ## Verify a change
 

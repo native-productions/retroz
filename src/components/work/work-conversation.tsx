@@ -40,6 +40,7 @@ export function WorkConversation({
   projectName,
   hasProjects,
   messages,
+  skillSlugs,
   model,
   onModelChange,
   attachments,
@@ -68,6 +69,8 @@ export function WorkConversation({
   projectName: string;
   hasProjects: boolean;
   messages: WorkMessage[];
+  /** Slugs a `/token` in a sent message renders as a skill chip for. */
+  skillSlugs: string[];
   model: string;
   onModelChange: (model: string) => void;
   attachments: WorkAttachment[];
@@ -176,7 +179,11 @@ export function WorkConversation({
             />
           ) : (
             messages.map((message) => (
-              <WorkMessageRow key={message.id} message={message} />
+              <WorkMessageRow
+                key={message.id}
+                message={message}
+                skillSlugs={skillSlugs}
+              />
             ))
           )}
           <div ref={bottomRef} />

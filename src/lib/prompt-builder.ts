@@ -1,5 +1,6 @@
 import type { AgentProvider } from "@/generated/prisma/enums";
 import { researchDirective } from "@/lib/research-tools";
+import { layoutContract } from "@/lib/render-guard";
 import type { ResearchMode } from "@/lib/research";
 
 interface AssetForPrompt {
@@ -185,6 +186,9 @@ These fonts are pre-loaded — just use them in CSS via font-family; do NOT
 that fit the mood of the content and the workflow instruction.
 ${fontList}${pairingList}
 ${skillsBlock}${researchBlock}
+=== LAYOUT RULES (hard — the renderer enforces these) ===
+${layoutContract(platform)}
+
 === CONTENT-ONLY RULE (important) ===
 The image shows ONLY audience-facing content. Never render production or campaign
 metadata onto the image, including:
@@ -229,7 +233,11 @@ ${step(5)}. For EACH final image, build a complete self-contained HTML document.
 ${step(6)}. Call the "render_html_to_png" tool with that HTML to export the PNG. Choose a
    width/height that matches the intended ${platform} format (e.g. 1080x1080
    square, 1080x1350 portrait, 1080x1920 story).
-${step(7)}. Give each output a clear, ordered filename (e.g. "01-hook.png", "02-tip.png").
+${step(7)}. IF THE RENDER IS REJECTED, fix it before moving on. The tool reports exactly
+   what broke and where. Inspect the PNG it wrote, correct the HTML, and
+   re-render the same filename. Never leave a rejected image behind, and never
+   silence the problem with "overflow: hidden".
+${step(8)}. Give each output a clear, ordered filename (e.g. "01-hook.png", "02-tip.png").
 
 === OUTPUT CONTRACT ===
 - Write ALL final PNGs into this run's output folder: ${outDirAbs}

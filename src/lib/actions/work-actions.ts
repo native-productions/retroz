@@ -192,8 +192,24 @@ export async function sendWorkMessage(input: unknown) {
   const data = workSendMessageSchema.parse(input);
   const session = await db.workSession.findUniqueOrThrow({
     where: { id: data.sessionId },
-    include: { _count: { select: { messages: true } } },
+    include: {
+      _count: { select: { messages: true } },
+      messages: { select: { attachments: true } },
+    },
   });
+
+  // The tray keeps every image of the session, so a later turn would repeat
+  // pictures an earlier bubble already shows. Record only what is new here.
+  const alreadySent = new Set(
+    session.messages.flatMap((m) =>
+      Array.isArray(m.attachments)
+        ? (m.attachments as { assetId?: string }[]).map((a) => a.assetId ?? "")
+        : [],
+    ),
+  );
+  const attachments = data.attachments.filter(
+    (a) => !alreadySent.has(a.assetId),
+  );
 
   const run = await db.taskRun.create({
     data: {
@@ -209,6 +225,7 @@ export async function sendWorkMessage(input: unknown) {
       sessionId: session.id,
       text: data.text,
       mentions: data.mentions,
+      attachments,
       researchMode: data.researchMode,
       taskRunId: run.id,
     },
@@ -231,13 +248,15 @@ export async function sendWorkMessage(input: unknown) {
 
   revalidatePath("/work");
   revalidatePath(`/work/${session.id}`);
-  return { runId: run.id, messageId: message.id };
+  // `attachments` goes back deduped so the optimistic bubble matches the row.
+  return { runId: run.id, messageId: message.id, attachments };
 }
 
 /**
- * Images the `@` menu can offer: this session's uploads first, then anything
- * mentionable from the workflow — its other asset folders and its global bank.
- * Ranked with the same keyword pass the run tools use.
+ * Images the `@` menu can offer: this session's uploads first, then the renders
+ * this project already produced (pointing at one asks for a revision), then
+ * anything mentionable from the workflow — its other asset folders and its
+ * global bank. Ranked with the same keyword pass the run tools use.
  */
 export async function listMentionCandidates(
   sessionId: string,
@@ -249,7 +268,7 @@ export async function listMentionCandidates(
   });
   if (!session) return [];
 
-  const [folderAssets, globalAssets] = await Promise.all([
+  const [folderAssets, globalAssets, renders] = await Promise.all([
     db.asset.findMany({
       where: { folder: { workflowId: session.project.workflowId } },
       orderBy: { createdAt: "asc" },
@@ -258,6 +277,7 @@ export async function listMentionCandidates(
       where: { workflowId: session.project.workflowId },
       orderBy: { createdAt: "asc" },
     }),
+    listProjectRenders(session.projectId, sessionId),
   ]);
 
   // `filename` is what the ranker scores against; the rest is the view model.
@@ -291,25 +311,49 @@ export async function listMentionCandidates(
       description: a.description,
       tags: [] as string[],
     })),
+    // A render's "description" is the session it came from, so typing part of a
+    // session title finds the slides it produced.
+    ...renders.map((r) => ({
+      ...r,
+      filename: r.name,
+      description: r.sourceLabel ?? "",
+      tags: [] as string[],
+    })),
   ];
 
-  const strip = ({ id, name, url, relPath, origin }: Candidate) => ({
+  const strip = ({
     id,
     name,
     url,
     relPath,
     origin,
+    sourceLabel,
+  }: Candidate) => ({
+    id,
+    name,
+    url,
+    relPath,
+    origin,
+    ...(sourceLabel ? { sourceLabel } : {}),
   });
 
-  // Session uploads are what the user just pasted — always show them first.
+  // Session uploads are what the user just pasted — always show them first, then
+  // the renders (revising one is the other common reason to reach for `@`).
   const sessionRows = rows.filter((r) => r.origin === "session");
-  const rest = rows.filter((r) => r.origin !== "session");
+  const renderRows = rows.filter((r) => r.origin === "render");
+  const rest = rows.filter(
+    (r) => r.origin !== "session" && r.origin !== "render",
+  );
   const needle = query.trim().toLowerCase();
 
-  // With nothing typed, `@` is a browser: recent pastes, then the banks ranked
-  // by the semantic pass.
+  // With nothing typed, `@` is a browser: recent pastes, recent renders, then
+  // the banks ranked by the semantic pass.
   if (!needle) {
-    return [...sessionRows, ...rankAssets(query, rest, 12)].map(strip);
+    return [
+      ...sessionRows,
+      ...renderRows.slice(0, 8),
+      ...rankAssets(query, rest, 12),
+    ].map(strip);
   }
 
   // With something typed it is a typeahead over names, so match the name the
@@ -337,6 +381,55 @@ export async function listMentionCandidates(
     )
     .slice(0, 12)
     .map((entry) => strip(entry.row));
+}
+
+/**
+ * PNGs this project has already rendered, newest first, with this session's own
+ * output ahead of the rest. Pointing at one of these is a revision request, so
+ * only the newest write of a path is offered — an earlier render of the same
+ * filename has been overwritten on disk and no longer exists to revise.
+ */
+async function listProjectRenders(
+  projectId: string,
+  sessionId: string,
+): Promise<WorkAttachment[]> {
+  const rows = await db.runArtifact.findMany({
+    where: { kind: "PNG", taskRun: { task: { workSession: { projectId } } } },
+    orderBy: { createdAt: "desc" },
+    take: 200,
+    select: {
+      id: true,
+      filename: true,
+      relPath: true,
+      taskRun: {
+        select: {
+          task: {
+            select: { workSession: { select: { id: true, title: true } } },
+          },
+        },
+      },
+    },
+  });
+
+  const byPath = new Map<string, WorkAttachment & { ownSession: boolean }>();
+  for (const row of rows) {
+    if (byPath.has(row.relPath)) continue;
+    const from = row.taskRun.task.workSession;
+    byPath.set(row.relPath, {
+      id: row.id,
+      name: row.filename,
+      url: mediaUrl(row.relPath),
+      relPath: row.relPath,
+      origin: "render",
+      sourceLabel: from?.title ?? "",
+      ownSession: from?.id === sessionId,
+    });
+  }
+
+  return [...byPath.values()]
+    .sort((a, b) => Number(b.ownSession) - Number(a.ownSession))
+    .slice(0, 60)
+    .map(({ ownSession: _ownSession, ...rest }) => rest);
 }
 
 /**

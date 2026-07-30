@@ -4,6 +4,11 @@ import fs from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { pathToFileURL } from "node:url";
 import { chromium, type Browser } from "playwright";
+import {
+  RENDER_RESET_CSS,
+  auditRenderedPage,
+  type RenderIssue,
+} from "@/lib/render-guard";
 
 // Reuse one browser across renders in a run (and across runs). Lazily launched.
 const globalForBrowser = globalThis as unknown as { pwBrowser?: Browser };
@@ -24,6 +29,8 @@ export interface RenderResult {
   height: number;
   /** The PNG bytes, so the caller can persist them to the blob store. */
   buffer: Buffer;
+  /** Everything the layout audit found wrong. Empty means a clean render. */
+  issues: RenderIssue[];
 }
 
 /**
@@ -32,7 +39,6 @@ export interface RenderResult {
  * dimensions are deterministic (good for Instagram formats).
  */
 function injectHeadStyle(html: string, css: string): string {
-  if (!css.trim()) return html;
   const style = `<style>\n${css}\n</style>`;
   if (/<head[^>]*>/i.test(html))
     return html.replace(/<head[^>]*>/i, (m) => `${m}\n${style}`);
@@ -50,7 +56,12 @@ export async function renderHtmlToPng(opts: {
   fontFaceCss?: string;
 }): Promise<RenderResult> {
   const { outDir, width, height } = opts;
-  const html = injectHeadStyle(opts.html, opts.fontFaceCss ?? "");
+  // The reset goes in unconditionally — a project with no registered fonts still
+  // needs animation stripped and the body margin cleared.
+  const html = injectHeadStyle(
+    opts.html,
+    `${RENDER_RESET_CSS}\n${opts.fontFaceCss ?? ""}`,
+  );
   const filename = opts.filename.endsWith(".png")
     ? opts.filename
     : `${opts.filename}.png`;
@@ -72,11 +83,22 @@ export async function renderHtmlToPng(opts: {
   });
   const page = await context.newPage();
   let buffer: Buffer;
+  let issues: RenderIssue[] = [];
+  // A background-image that fails to load leaves no DOM trace, so the network
+  // layer is the only place to catch it. Registered before goto to catch every
+  // request the page makes.
+  const failedUrls: string[] = [];
+  page.on("requestfailed", (req) => {
+    if (failedUrls.length < 8) failedUrls.push(req.url());
+  });
   try {
     await page.goto(pathToFileURL(tmpHtml).href, { waitUntil: "networkidle" });
     await page.evaluate(() =>
       "fonts" in document ? (document as Document).fonts.ready : null,
     );
+    // Audited before the screenshot so the measurements describe exactly the
+    // layout that gets captured.
+    issues = await auditRenderedPage(page, width, height, failedUrls);
     buffer = await page.screenshot({ clip: { x: 0, y: 0, width, height } });
   } finally {
     await context.close();
@@ -87,7 +109,7 @@ export async function renderHtmlToPng(opts: {
   // produced; the caller is responsible for persisting the bytes to storage.
   await fs.writeFile(absPath, buffer);
 
-  return { absPath, filename, width, height, buffer };
+  return { absPath, filename, width, height, buffer, issues };
 }
 
 export async function closeBrowser(): Promise<void> {

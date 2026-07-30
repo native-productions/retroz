@@ -13,7 +13,8 @@ import {
   type StockPhoto,
   type StockSource,
 } from "@/lib/stock";
-import type { RunEventType } from "@/generated/prisma/enums";
+import { formatRenderIssues } from "@/lib/render-guard";
+import type { AgentProvider, RunEventType } from "@/generated/prisma/enums";
 
 // The "retroz" tool set exposed to the running agent. Provider-neutral: the
 // Claude backend hosts these in-process via the Agent SDK, the Codex backend
@@ -44,6 +45,8 @@ export interface ImportTarget {
 /** Everything a tool needs about the run it belongs to. */
 export interface RunToolContext {
   taskRunId: string;
+  /** Decides which image-reading tool a result points the agent at. */
+  provider: AgentProvider;
   /** Local directory the agent renders into. */
   outDirAbs: string;
   /** Storage key prefix those outputs are persisted under. */
@@ -111,7 +114,7 @@ function defineRunTool<Shape extends z.ZodRawShape>(
 export const RUN_TOOLS: RunToolDef[] = [
   defineRunTool(
     "render_html_to_png",
-    "Render a self-contained HTML document to a PNG saved in this run's output folder. Use for every final image. The HTML may reference source photos via absolute file:// paths or data URIs.",
+    "Render a self-contained HTML document to a PNG saved in this run's output folder. Use for every final image. The HTML may reference source photos via absolute file:// paths or data URIs. The rendered page is AUDITED before it is accepted: the call FAILS when content overflows the frame, text is clipped, an image did not load, an element renders invisible, or text overlaps an icon. On failure, fix the HTML and call this again with the SAME filename.",
     {
       html: z.string().describe("Complete self-contained HTML document."),
       filename: z.string().describe("Output filename, e.g. '01-hook.png'."),
@@ -144,6 +147,7 @@ export const RUN_TOOLS: RunToolDef[] = [
           },
           select: { id: true },
         });
+        await keepRenderSource(artifact.id, res.filename, args);
         // The row id travels with the event so a live viewer can act on the
         // render (bundle it, for instance) before the page ever refreshes.
         await ctx.record("ARTIFACT", {
@@ -152,7 +156,27 @@ export const RUN_TOOLS: RunToolDef[] = [
           relPath,
           width: res.width,
           height: res.height,
+          ...(res.issues.length > 0
+            ? { issues: res.issues.map((i) => i.kind) }
+            : {}),
         });
+
+        if (res.issues.length > 0) {
+          // The PNG is kept deliberately: the agent needs to see what it got
+          // wrong, and the run viewer should show the broken frame rather than a
+          // gap. The failure is what forces the correction.
+          const viewTool = ctx.provider === "CODEX" ? "view_image" : "Read";
+          return text(
+            [
+              `REJECTED ${res.filename} — the rendered frame is broken:`,
+              formatRenderIssues(res.issues),
+              "",
+              `The PNG was still written to ${res.absPath}. Use the "${viewTool}" tool on that path to see the damage, then fix the HTML and call render_html_to_png again with the SAME filename "${res.filename}" to replace it.`,
+              "Fix the layout — do not hide the problem with overflow:hidden, and do not move on to the next image until this one renders clean.",
+            ].join("\n"),
+            true,
+          );
+        }
         return text(`Saved ${res.filename} (${res.width}x${res.height}).`);
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
@@ -415,6 +439,53 @@ async function fetchStock(url: string): Promise<Response> {
   );
   await new Promise((resolve) => setTimeout(resolve, waitMs));
   return fetch(url, { headers: { "User-Agent": STOCK_USER_AGENT } });
+}
+
+/**
+ * A document past this is almost certainly carrying base64 photo payloads. The
+ * PNG is already stored, so the only thing lost by skipping one is the ability
+ * to revise it later — worth trading against parking megabytes per slide in
+ * Postgres forever.
+ */
+const MAX_KEPT_HTML_BYTES = 4_000_000;
+
+/**
+ * Keep the source document alongside the render so a revision months later has
+ * something to edit. Never fails the render: the image exists either way, and
+ * losing the source is a smaller problem than losing the run.
+ */
+async function keepRenderSource(
+  artifactId: string,
+  filename: string,
+  args: { html: string; width: number; height: number },
+): Promise<void> {
+  const bytes = Buffer.byteLength(args.html, "utf8");
+  // Both branches below are logged: a render that quietly has no source looks
+  // fine today and only surfaces months later, as "I cannot revise this".
+  if (bytes > MAX_KEPT_HTML_BYTES) {
+    console.warn(
+      `[retroz] ${filename}: HTML source not kept (${bytes} bytes exceeds the ` +
+        `${MAX_KEPT_HTML_BYTES} limit) — this render will not be revisable. ` +
+        "Reference photos by file:// path instead of embedding data URIs.",
+    );
+    return;
+  }
+  try {
+    await db.renderSource.create({
+      data: {
+        artifactId,
+        html: args.html,
+        width: args.width,
+        height: args.height,
+      },
+    });
+  } catch (err) {
+    // Storing the source is best-effort — the render already succeeded.
+    console.warn(
+      `[retroz] ${filename}: HTML source not stored — this render will not be ` +
+        `revisable: ${err instanceof Error ? err.message : String(err)}`,
+    );
+  }
 }
 
 function formatAssetLine(a: RunToolAsset): string {

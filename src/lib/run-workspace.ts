@@ -26,6 +26,11 @@ export interface RunWorkspace {
   dir(prefix: string, name: string): Promise<string>;
   /** Materialize stored files, returning a key → absolute path lookup. */
   files(keys: string[], name: string): Promise<Map<string, string>>;
+  /**
+   * An empty local directory for files the run needs on disk but must NOT
+   * publish — only `outDirAbs` is uploaded on close.
+   */
+  scratch(name: string): Promise<string>;
   /** Upload anything the agent left in the output directory, then clean up. */
   close(): Promise<void>;
 }
@@ -59,6 +64,12 @@ export async function openRunWorkspace(
         resolved.set(key, await storage.hydrate(key, dest));
       }
       return resolved;
+    },
+
+    async scratch(name) {
+      const dirAbs = path.join(rootAbs, name);
+      await fs.mkdir(dirAbs, { recursive: true });
+      return dirAbs;
     },
 
     async close() {

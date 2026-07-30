@@ -14,6 +14,7 @@
     "storage:migrate": "bun run scripts/migrate-storage.ts",
     "storage:migrate-runs": "bun run scripts/migrate-run-folders.ts",
     "artifacts:backfill": "bun run scripts/backfill-artifact-bytes.ts",
+    "storage:recache": "bun run scripts/backfill-cache-headers.ts",
     "postinstall": "prisma generate"
   },
   "dependencies": {

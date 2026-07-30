@@ -45,7 +45,12 @@ function buildChip(att: WorkAttachment): HTMLSpanElement {
   chip.dataset.assetId = att.id;
   chip.dataset.relPath = att.relPath;
   chip.dataset.url = att.url;
-  chip.className = CHIP_CLASS;
+  // A render carries a RunArtifact id, not an Asset id, and means "revise this".
+  const isRender = att.origin === "render";
+  chip.dataset.kind = isRender ? "render" : "asset";
+  // Accented border: pointing at a render asks for an edit, not for material to
+  // compose over, and that difference should be visible while typing.
+  chip.className = isRender ? `${CHIP_CLASS} border-accent` : CHIP_CLASS;
 
   const img = document.createElement("img");
   img.src = att.url;
@@ -104,6 +109,7 @@ function serialize(root: HTMLElement): { text: string; mentions: WorkMention[] }
           assetId: node.dataset.assetId ?? "",
           relPath: node.dataset.relPath ?? "",
           url: node.dataset.url ?? "",
+          kind: node.dataset.kind === "render" ? "render" : "asset",
         });
       }
       return;

@@ -333,8 +333,31 @@ model RunArtifact {
   createdAt DateTime @default(now())
 
   bundleItems WorkBundleItem[]
+  source      RenderSource?
 
   @@index([taskRunId])
+}
+
+// The HTML that produced a PNG, kept so a render stays editable long after the
+// run that made it. Its own table rather than a column on RunArtifact: the
+// artifact rows are read on every gallery, run viewer, and Work session load,
+// and dragging a multi-KB document through those queries for a thumbnail would
+// be pure waste. Nothing here is required — a row is missing for every render
+// made before this existed, and for documents too large to be worth keeping.
+model RenderSource {
+  id         String      @id @default(cuid())
+  artifactId String      @unique
+  artifact   RunArtifact @relation(fields: [artifactId], references: [id], onDelete: Cascade)
+
+  // Exactly what the agent passed to render_html_to_png — before the reset CSS
+  // and @font-face block are injected, since those are rebuilt from the font
+  // bank on every render and would otherwise freeze at their old values.
+  html      String
+  // Viewport the document was captured at, so a re-render reproduces the frame
+  // without the caller having to guess.
+  width     Int
+  height    Int
+  createdAt DateTime @default(now())
 }
 
 // ---------------------------------------------------------------------------
@@ -578,8 +601,12 @@ model WorkMessage {
   session   WorkSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
   text String
-  // [{ name, assetId, relPath }] — the images this turn pointed at with @.
+  // [{ name, assetId, relPath, url }] — the images this turn pointed at with @.
   mentions Json?
+  // [{ name, assetId, relPath, url }] — the images this turn introduced from the
+  // composer tray, whether or not the text mentioned them. Kept per message so
+  // the bubble can show what was handed over on that turn.
+  attachments Json?
   // Web research for this turn only. Null on rows written before the setting
   // existed, read as AUTO.
   researchMode ResearchMode?

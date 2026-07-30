@@ -130,8 +130,24 @@ export function WorkTriggerMenu({
                     alt=""
                     className="size-8 shrink-0 rounded-[3px] border-2 border-border object-cover"
                   />
-                  <span className="min-w-0 flex-1 truncate font-mono text-xs font-semibold">
-                    {item.name}
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-mono text-xs font-semibold">
+                      {item.name}
+                    </span>
+                    {/* Renders repeat filenames across sessions, so name alone
+                        is not enough to tell two slides apart. */}
+                    {item.sourceLabel ? (
+                      <span
+                        className={cn(
+                          "block truncate text-[11px] leading-tight",
+                          i === activeIndex
+                            ? "text-secondary-fg/80"
+                            : "text-fg-muted/70",
+                        )}
+                      >
+                        {item.sourceLabel}
+                      </span>
+                    ) : null}
                   </span>
                   {item.origin === "session" ? null : (
                     <span
@@ -142,7 +158,11 @@ export function WorkTriggerMenu({
                           : "text-fg-muted/60",
                       )}
                     >
-                      {item.origin === "global" ? "brand" : "bank"}
+                      {item.origin === "render"
+                        ? "revise"
+                        : item.origin === "global"
+                          ? "brand"
+                          : "bank"}
                     </span>
                   )}
                 </Row>

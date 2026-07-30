@@ -7,6 +7,7 @@ import { buildFontFaceCss } from "@/lib/font-css";
 import { buildWorkPrompt, buildWorkTurnPrompt } from "@/lib/work-prompt";
 import { aspectRatioRule } from "@/lib/aspect-ratios";
 import { ensureProjectAssetFolderRow } from "@/lib/project-assets";
+import { stageRevisions } from "@/lib/render-revision";
 import { emitRunEvent, type RunBusEvent } from "@/lib/run-bus";
 import {
   RUN_TOOLS,
@@ -32,8 +33,11 @@ const WORK_BASE_TOOLS = ["Read", "Write", "Glob", "Grep", "Bash", "TodoWrite"];
 
 interface StoredMention {
   name: string;
+  /** Asset id, or RunArtifact id when `kind` is "render". */
   assetId: string;
   relPath: string;
+  /** Absent on turns recorded before renders became mentionable. */
+  kind?: "asset" | "render";
 }
 
 /**
@@ -87,6 +91,11 @@ export async function executeWorkTurn(taskRunId: string): Promise<void> {
     (m) => m.taskRunId && m.taskRunId !== taskRunId,
   );
   const mentions = (message?.mentions as StoredMention[] | null) ?? [];
+  // Two different things wear the same `@` chip: a source photo to compose over,
+  // and a finished render to edit. They must not be confused — a render and an
+  // asset can carry the identical filename.
+  const assetMentions = mentions.filter((m) => m.kind !== "render");
+  const renderMentions = mentions.filter((m) => m.kind === "render");
 
   // Research is a per-turn choice made in the composer. Null hides the web tools
   // completely; rows written before the setting existed read as AUTO.
@@ -175,7 +184,7 @@ export async function executeWorkTurn(taskRunId: string): Promise<void> {
     }
   }
 
-  const mentionedIds = new Set(mentions.map((m) => m.assetId));
+  const mentionedIds = new Set(assetMentions.map((m) => m.assetId));
   const outsideFolders = await db.assetFolder.findMany({
     where: {
       workflowId: workflow.id,
@@ -221,9 +230,27 @@ export async function executeWorkTurn(taskRunId: string): Promise<void> {
     }
   }
 
-  const mentionedNames = new Set(mentions.map((m) => m.name));
+  const mentionedNames = new Set(assetMentions.map((m) => m.name));
   const mentioned = assets.filter((a) => mentionedNames.has(a.filename));
   const available = assets.filter((a) => !mentionedNames.has(a.filename));
+
+  // --- renders this turn asked to revise ---------------------------------
+  // Staged after the assets, because rehoming a stored document's photo paths
+  // needs the list of where those photos live in THIS run.
+  const revisions = await stageRevisions({
+    artifactIds: renderMentions.map((m) => m.assetId),
+    sessionId: session.id,
+    workspace,
+    assets,
+  });
+  const revisionDirs = [
+    ...new Set(
+      revisions.flatMap((r) => [
+        path.dirname(r.pngAbsPath),
+        ...(r.htmlAbsPath ? [path.dirname(r.htmlAbsPath)] : []),
+      ]),
+    ),
+  ];
 
   // --- fonts available to this session: workflow-assigned, else the bank ---
   const assigned = await db.workflowFont.findMany({
@@ -344,6 +371,7 @@ export async function executeWorkTurn(taskRunId: string): Promise<void> {
     projectInstruction: project.instruction,
     outDirAbs,
     mentioned,
+    revisions,
     available,
     fonts: fonts.map((f) => ({
       family: f.family,
@@ -378,6 +406,7 @@ export async function executeWorkTurn(taskRunId: string): Promise<void> {
 
   const turnPrompt = buildWorkTurnPrompt({
     mentioned,
+    revisions,
     inlinedSkills,
     revisedBrief: briefChanged
       ? { projectName: project.name, instruction: project.instruction }
@@ -389,6 +418,7 @@ export async function executeWorkTurn(taskRunId: string): Promise<void> {
 
   const toolContext: RunToolContext = {
     taskRunId,
+    provider,
     outDirAbs,
     outPrefix: outputRelPath,
     fontFaceCss,
@@ -424,7 +454,9 @@ export async function executeWorkTurn(taskRunId: string): Promise<void> {
       prompt: resume ? turnPrompt : fullPrompt,
       model,
       cwd: outDirAbs,
-      additionalDirectories: [outDirAbs],
+      // The revision copies live outside the output folder on purpose (they must
+      // not be published), so they have to be granted explicitly.
+      additionalDirectories: [outDirAbs, ...revisionDirs],
       tools,
       toolContext,
       baseTools: WORK_BASE_TOOLS,

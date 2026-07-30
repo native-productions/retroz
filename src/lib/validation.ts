@@ -161,14 +161,21 @@ export const workSessionUpdateSchema = z.object({
 
 export const workMentionSchema = z.object({
   name: z.string().min(1).max(160),
+  // An Asset id for "asset", a RunArtifact id for "render".
   assetId: z.string().min(1),
   relPath: z.string().min(1),
+  // A render the agent produced earlier, pointed at for revision. Absent on rows
+  // written before renders were mentionable, which read as "asset".
+  kind: z.enum(["asset", "render"]).default("asset"),
 });
 
 export const workSendMessageSchema = z.object({
   sessionId: z.string().min(1),
   text: z.string().min(1, "Say something first").max(8000),
   mentions: z.array(workMentionSchema).max(20).default([]),
+  // Everything sitting in the composer tray when the message was sent. The
+  // action keeps only the ones no earlier turn already handed over.
+  attachments: z.array(workMentionSchema).max(40).default([]),
   researchMode: researchModeEnum.default("AUTO"),
 });
 

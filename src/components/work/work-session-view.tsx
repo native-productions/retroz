@@ -199,6 +199,11 @@ export function WorkSessionView({
       sessionId,
       text,
       mentions,
+      attachments: attachments.map((a) => ({
+        name: a.name,
+        assetId: a.id,
+        relPath: a.relPath,
+      })),
       researchMode: research,
     });
     setPending((prev) => [
@@ -209,6 +214,10 @@ export function WorkSessionView({
         timeLabel: timeLabel(new Date().toISOString()),
         text,
         mentions,
+        attachments: res.attachments.map((a) => ({
+          ...a,
+          url: mediaUrl(a.relPath),
+        })),
         runId: res.runId,
       },
     ]);
@@ -254,6 +263,7 @@ export function WorkSessionView({
         projectName={projectName}
         hasProjects={hasProjects}
         messages={messages}
+        skillSlugs={detail?.skillSlugs ?? []}
         model={model}
         onModelChange={changeModel}
         attachments={attachments}

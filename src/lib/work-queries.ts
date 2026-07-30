@@ -150,6 +150,8 @@ export interface WorkSessionDetail {
   liveRunId: string | null;
   messages: WorkMessage[];
   attachments: WorkAttachment[];
+  /** Slugs the `/` chips in a bubble are validated against. */
+  skillSlugs: string[];
   results: WorkResult[];
   plan: WorkPlanStep[];
 }
@@ -165,6 +167,7 @@ export async function getWorkSessionDetail(
   const session = await db.workSession.findUnique({
     where: { id: sessionId },
     include: {
+      project: { select: { workflowId: true } },
       assetFolder: { include: { assets: { orderBy: { createdAt: "asc" } } } },
       messages: { orderBy: { createdAt: "asc" } },
       task: {
@@ -198,7 +201,8 @@ export async function getWorkSessionDetail(
       role: "user",
       timeLabel: timeLabel(message.createdAt.toISOString()),
       text: message.text,
-      mentions: (message.mentions as WorkMention[] | null) ?? [],
+      mentions: toMentions(message.mentions),
+      attachments: toMentions(message.attachments),
       runId: message.taskRunId,
     });
 
@@ -224,6 +228,21 @@ export async function getWorkSessionDetail(
     }
   }
 
+  // Mirrors the executor: the workflow's assigned skills, or the whole enabled
+  // bank when it has assigned none.
+  const [assignedSkills, skillBank] = await Promise.all([
+    db.workflowSkill.findMany({
+      where: { workflowId: session.project.workflowId },
+      include: { skill: { select: { slug: true, enabled: true } } },
+    }),
+    db.skill.findMany({ where: { enabled: true }, select: { slug: true } }),
+  ]);
+  const assignedSlugs = assignedSkills
+    .filter((w) => w.skill.enabled)
+    .map((w) => w.skill.slug);
+  const skillSlugs =
+    assignedSlugs.length > 0 ? assignedSlugs : skillBank.map((s) => s.slug);
+
   const lastRun = runs[runs.length - 1];
   const plan = lastRun
     ? planFromEvents(lastRun.events.map(toWorkEvent))
@@ -247,9 +266,33 @@ export async function getWorkSessionDetail(
       url: mediaUrl(a.relPath),
       origin: "session" as const,
     })),
+    skillSlugs,
     results: [...byPath.values()],
     plan,
   };
+}
+
+/**
+ * Stored mention/attachment rows carry only `{ name, assetId, relPath }` — the
+ * browser URL is derived here so a change of media host never strands old rows.
+ */
+function toMentions(value: unknown): WorkMention[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .filter(
+      (row): row is { name: string; assetId: string; relPath: string } =>
+        typeof row === "object" &&
+        row !== null &&
+        typeof (row as { relPath?: unknown }).relPath === "string" &&
+        typeof (row as { name?: unknown }).name === "string",
+    )
+    .map((row) => ({
+      name: row.name,
+      assetId: row.assetId ?? "",
+      relPath: row.relPath,
+      url: mediaUrl(row.relPath),
+      kind: (row as { kind?: string }).kind === "render" ? "render" : "asset",
+    }));
 }
 
 function toWorkEvent(e: {

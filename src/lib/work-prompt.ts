@@ -1,5 +1,6 @@
 import type { AgentProvider } from "@/generated/prisma/enums";
 import { researchDirective } from "@/lib/research-tools";
+import { layoutContract } from "@/lib/render-guard";
 import type { ResearchMode } from "@/lib/research";
 
 // Prompts for the Work playground. Unlike a task run — one instruction, one
@@ -70,6 +71,8 @@ export interface WorkPromptInput {
   outDirAbs: string;
   /** Images the user pointed at with `@` in this message. */
   mentioned: WorkAsset[];
+  /** Finished renders the user pointed at — a request to edit, not to compose. */
+  revisions: RevisionForPrompt[];
   /** Everything else reachable through list_assets / search_assets. */
   available: WorkAsset[];
   fonts: FontForPrompt[];
@@ -104,6 +107,68 @@ ${assetLines(mentioned)}
 `;
 }
 
+/** A render the user pointed at, with the document that produced it. */
+export interface RevisionForPrompt {
+  filename: string;
+  pngAbsPath: string;
+  htmlAbsPath: string | null;
+  width: number | null;
+  height: number | null;
+  sessionTitle: string;
+  foreign: boolean;
+  unresolved: string[];
+}
+
+/**
+ * Revision targets. This has to be explicit rather than left to the resumed
+ * session: the HTML may be months old, the engine session may never have seen
+ * it, and the file paths inside it are freshly rewritten for this run.
+ */
+export function revisionBlock(revisions: RevisionForPrompt[]): string {
+  if (revisions.length === 0) return "";
+
+  const lines = revisions
+    .map((r) => {
+      const size = r.width && r.height ? ` (${r.width}x${r.height})` : "";
+      const from = r.sessionTitle ? ` — from session "${r.sessionTitle}"` : "";
+      const rows = [`  - ${r.filename}${size}${from}`];
+      rows.push(`     png:  ${r.pngAbsPath}   <- look at this first`);
+      if (r.htmlAbsPath) {
+        rows.push(`     html: ${r.htmlAbsPath}   <- edit THIS, do not rewrite from scratch`);
+        if (r.unresolved.length > 0) {
+          rows.push(
+            `     note: these references no longer resolve and must be re-sourced: ${r.unresolved.join(", ")}`,
+          );
+        }
+      } else {
+        rows.push(
+          "     html: not kept (rendered before sources were stored) — rebuild it to match the PNG as closely as you can",
+        );
+      }
+      if (r.foreign) {
+        rows.push(
+          "     note: made in another session; re-rendering it writes a copy into THIS session's folder",
+        );
+      }
+      return rows.join("\n");
+    })
+    .join("\n");
+
+  return `\n=== RENDERS TO REVISE ===
+The user pointed at images you already produced. Each one's source document is on
+disk, with its photo paths already rewritten for this run.
+${lines}
+
+How to revise:
+1. Inspect the PNG so you are fixing the real defect, not a guessed one.
+2. Read the HTML and change the cause. A collision between text and image is a
+   layout problem — fix the geometry, do not crop, scale down, or hide overflow.
+3. Re-render with render_html_to_png using the SAME filename and the SAME size,
+   which replaces the image. Do not invent a new filename for a revision.
+4. Change only what was asked about. Everything else in that document stays.
+`;
+}
+
 /** First turn of a session: the full working agreement plus the user message. */
 export function buildWorkPrompt(input: WorkPromptInput): string {
   const {
@@ -115,6 +180,7 @@ export function buildWorkPrompt(input: WorkPromptInput): string {
     projectInstruction,
     outDirAbs,
     mentioned,
+    revisions,
     available,
     fonts,
     pairings,
@@ -190,12 +256,15 @@ ${projectInstruction || "(no brief written yet — fall back on the channel inst
 === CHANNEL INSTRUCTION (${workflowName}) ===
 Applies to every project on this channel.
 ${globalInstruction || "(none)"}
-${mentionBlock(mentioned)}${availableBlock}
+${mentionBlock(mentioned)}${revisionBlock(revisions)}${availableBlock}
 === AVAILABLE FONTS ===
 These fonts are pre-loaded — use them in CSS via font-family; do NOT @font-face
 them yourself, the renderer injects the faces for you.
 ${fontList}${pairingList}
 ${skillsBlock}${inlinedSkillBlock(inlinedSkills)}${researchBlock(research)}
+=== LAYOUT RULES (hard — the renderer enforces these) ===
+${layoutContract(platform)}
+
 === CONTENT-ONLY RULE ===
 The image shows ONLY audience-facing content. Never render production metadata
 (day/slot counters, series labels, angle tags like "HOOK"/"CTA") unless the user
@@ -235,7 +304,11 @@ ${step(6)}. Call "render_html_to_png" to export it. ${
     aspectRule ||
     `Pick a size that fits the intended ${platform} format (1080x1080 square, 1080x1350 portrait, 1080x1920 story).`
   }
-${step(7)}. Give each image a clear, ordered filename ("01-hook.png"). Re-rendering the
+${step(7)}. IF THE RENDER IS REJECTED, fix it before moving on. The tool reports exactly
+   what broke and where. Inspect the PNG it wrote, correct the HTML, and
+   re-render the same filename. Never leave a rejected image behind, and never
+   silence the problem with "overflow: hidden".
+${step(8)}. Give each image a clear, ordered filename ("01-hook.png"). Re-rendering the
    same filename replaces that image — do that when the user asks for a revision,
    and use a new filename for a genuinely new image.
 
@@ -259,6 +332,7 @@ ${message}`;
  */
 export function buildWorkTurnPrompt(input: {
   mentioned: WorkAsset[];
+  revisions: RevisionForPrompt[];
   inlinedSkills: InlinedSkill[];
   /** Set only when the brief changed since the last turn — see work-executor. */
   revisedBrief: { projectName: string; instruction: string } | null;
@@ -285,7 +359,9 @@ ${input.revisedBrief.instruction || "(the brief was cleared — fall back on the
 Web research is off for this message. Do not call "web_search" or "web_extract",
 whatever earlier turns said.
 `;
-  return `${mentionBlock(input.mentioned)}${brief}${inlinedSkillBlock(
+  return `${mentionBlock(input.mentioned)}${revisionBlock(
+    input.revisions,
+  )}${brief}${inlinedSkillBlock(
     input.inlinedSkills,
   )}${research}${size}
 ${input.message}`.trim();

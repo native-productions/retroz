@@ -18,6 +18,13 @@ import { normalizeKey, type PutOptions, type Storage, type StorageObject } from 
 const TRANSFER_CONCURRENCY = 8;
 /** S3 caps a single DeleteObjects request at 1000 keys. */
 const DELETE_BATCH = 1000;
+/**
+ * Every key in this store is mutable: re-rendering a slide replaces the object
+ * at the same key, and the browser reads bucket URLs directly, so a cached copy
+ * would keep showing the pre-revision image. `no-cache` still lets the browser
+ * keep the bytes — it just has to revalidate, which costs one 304 per view.
+ */
+const MUTABLE_CACHE_CONTROL = "no-cache";
 
 export interface S3StorageConfig {
   endpoint: string;
@@ -64,6 +71,7 @@ export class S3Storage implements Storage {
         Key: k,
         Body: body,
         ContentType: opts?.contentType ?? contentTypeFor(k),
+        CacheControl: MUTABLE_CACHE_CONTROL,
       }),
     );
   }
@@ -138,6 +146,7 @@ export class S3Storage implements Storage {
         Key: normalizeKey(toKey),
         CopySource: encodeSource(this.bucket, from),
         ContentType: contentTypeFor(toKey),
+        CacheControl: MUTABLE_CACHE_CONTROL,
         MetadataDirective: "REPLACE",
       }),
     );

@@ -236,6 +236,7 @@ export async function executeRun(taskRunId: string): Promise<void> {
 
   const toolContext: RunToolContext = {
     taskRunId,
+    provider,
     outDirAbs,
     outPrefix: outputRelPath,
     fontFaceCss,

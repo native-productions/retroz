@@ -34,7 +34,7 @@ export interface WorkSession {
   status: WorkSessionStatus;
 }
 
-/** An image pasted into a session — a real Asset row under the session folder. */
+/** An image the `@` menu can offer: an uploaded Asset, or a finished render. */
 export interface WorkAttachment {
   id: string;
   /** Mention handle and display name, e.g. `image-2.png`. */
@@ -42,15 +42,24 @@ export interface WorkAttachment {
   /** Browser URL for the stored file. */
   url: string;
   relPath: string;
-  /** Where it came from: this session's uploads, or the workflow's banks. */
-  origin: "session" | "folder" | "global";
+  /**
+   * Where it came from: this session's uploads, the workflow's banks, or a PNG
+   * this project already rendered — `render` is the one the agent revises rather
+   * than composes over.
+   */
+  origin: "session" | "folder" | "global" | "render";
+  /** Session a render came from, for the picker's second line. Empty otherwise. */
+  sourceLabel?: string;
 }
 
 export interface WorkMention {
   name: string;
+  /** Asset id when `kind` is "asset", RunArtifact id when it is "render". */
   assetId: string;
   relPath: string;
   url: string;
+  /** Older stored mentions carry no kind and are read as "asset". */
+  kind?: "asset" | "render";
 }
 
 /** A skill the composer can reference with `/slug`. */
@@ -69,6 +78,8 @@ export interface WorkUserMessage {
   timeLabel: string;
   text: string;
   mentions: WorkMention[];
+  /** Images this turn handed over, mentioned in the text or not. */
+  attachments: WorkMention[];
   /** The turn this message kicked off, if it has one. */
   runId: string | null;
 }
