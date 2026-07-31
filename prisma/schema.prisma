@@ -607,9 +607,13 @@ model WorkMessage {
   // composer tray, whether or not the text mentioned them. Kept per message so
   // the bubble can show what was handed over on that turn.
   attachments Json?
-  // Web research for this turn only. Null on rows written before the setting
+  // Tavily research for this turn only. Null on rows written before the setting
   // existed, read as AUTO.
   researchMode ResearchMode?
+  // The browsing agent for this turn only: read_web_page, a local Playwright
+  // browser. Separate from researchMode because it shares nothing with Tavily —
+  // no API key, no external service, and it is the only source of screenshots.
+  browseWeb Boolean @default(true)
 
   taskRunId String?
   taskRun   TaskRun? @relation(fields: [taskRunId], references: [id], onDelete: SetNull)

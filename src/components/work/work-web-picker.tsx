@@ -3,19 +3,27 @@
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { Check, Globe } from "lucide-react";
 import { cn } from "@/lib/cn";
-import {
-  RESEARCH_MODES,
-  RESEARCH_LABELS,
-  RESEARCH_HINTS,
-  type ResearchMode,
-} from "@/lib/research";
+import { RESEARCH_MODES, RESEARCH_LABELS, type ResearchMode } from "@/lib/research";
 
 /**
- * Web research for the next message. It sits in the composer rather than the
- * session header because whether a request needs checking is a property of that
- * request — one turn asks for a restyle, the next asks for this year's numbers.
+ * Tavily web search for the next message. Opening the links in the message is a
+ * separate control (see work-browse-toggle) — a different service, a different
+ * question.
+ *
+ * It sits in the composer rather than the session header because whether a
+ * request needs checking is a property of that request: one turn asks for a
+ * restyle, the next asks for this year's numbers.
+ *
+ * Its own copy rather than RESEARCH_HINTS because those hints are shared with
+ * the workflow and campaign pickers, where "web" still means both halves.
  */
-export function WorkResearchPicker({
+const WEB_HINTS: Record<ResearchMode, string> = {
+  AUTO: "Searches only when the content states a fact — a number, date, or claim.",
+  ON: "Researches the subject before writing, on every message.",
+  OFF: "No search. Writes from your instruction alone.",
+};
+
+export function WorkWebPicker({
   value,
   onChange,
 }: {
@@ -31,8 +39,8 @@ export function WorkResearchPicker({
       <DropdownMenu.Trigger asChild>
         <button
           type="button"
-          title="Web research"
-          aria-label={`Web research: ${RESEARCH_LABELS[value].toLowerCase()}`}
+          title="Web search"
+          aria-label={`Web search: ${RESEARCH_LABELS[value].toLowerCase()}`}
           className={cn(
             "flex h-8 items-center gap-1.5 rounded-[var(--radius-retro)] border-2 px-2 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring active:scale-95",
             active
@@ -53,10 +61,10 @@ export function WorkResearchPicker({
           align="start"
           side="top"
           sideOffset={8}
-          className="retro-card z-50 min-w-[15rem] p-1 shadow-hard-lg"
+          className="retro-card z-50 min-w-[16rem] p-1 shadow-hard-lg"
         >
           <DropdownMenu.Label className="px-2 pb-1 pt-1.5 font-mono text-[10px] uppercase tracking-widest text-fg-muted/70">
-            Web research
+            Web search
           </DropdownMenu.Label>
 
           {RESEARCH_MODES.map((mode) => (
@@ -77,7 +85,7 @@ export function WorkResearchPicker({
                 {RESEARCH_LABELS[mode]}
               </span>
               <span className="min-w-0 flex-1 font-mono text-[10px] leading-snug opacity-70">
-                {RESEARCH_HINTS[mode]}
+                {WEB_HINTS[mode]}
               </span>
               {mode === value ? (
                 <Check className="mt-0.5 size-3.5 shrink-0" strokeWidth={3} />

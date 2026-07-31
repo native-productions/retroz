@@ -227,6 +227,7 @@ export async function sendWorkMessage(input: unknown) {
       mentions: data.mentions,
       attachments,
       researchMode: data.researchMode,
+      browseWeb: data.browseWeb,
       taskRunId: run.id,
     },
   });

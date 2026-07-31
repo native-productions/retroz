@@ -51,6 +51,12 @@ export interface RunToolContext {
   outDirAbs: string;
   /** Storage key prefix those outputs are persisted under. */
   outPrefix: string;
+  /**
+   * Run-local directory web captures are written to. Never published — only
+   * `outDirAbs` is uploaded when the workspace closes. Null when the run has no
+   * browsing enabled, which disables the browse tools.
+   */
+  webDirAbs: string | null;
   fontFaceCss: string;
   assets: RunToolAsset[];
   importTarget: ImportTarget | null;
@@ -546,6 +552,12 @@ export function summarizeToolInput(name: string, input: unknown): unknown {
   if (name.endsWith("web_search") && input && typeof input === "object") {
     const i = input as Record<string, unknown>;
     return { query: i.query, ...(i.topic === "news" ? { topic: "news" } : {}) };
+  }
+  // One page, so the host alone is the useful part; the full URL is long and the
+  // run log is replayed into the conversation view.
+  if (name.endsWith("read_web_page") && input && typeof input === "object") {
+    const url = (input as Record<string, unknown>).url;
+    return { source: hostOf(String(url)) };
   }
   // Show which sites were read, not the URLs — they are long and the run log is
   // replayed into the conversation view.

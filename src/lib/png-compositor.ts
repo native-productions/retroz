@@ -3,24 +3,12 @@ import path from "node:path";
 import fs from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import { pathToFileURL } from "node:url";
-import { chromium, type Browser } from "playwright";
+import { getBrowser } from "@/lib/browser-pool";
 import {
   RENDER_RESET_CSS,
   auditRenderedPage,
   type RenderIssue,
 } from "@/lib/render-guard";
-
-// Reuse one browser across renders in a run (and across runs). Lazily launched.
-const globalForBrowser = globalThis as unknown as { pwBrowser?: Browser };
-
-async function getBrowser(): Promise<Browser> {
-  if (globalForBrowser.pwBrowser && globalForBrowser.pwBrowser.isConnected()) {
-    return globalForBrowser.pwBrowser;
-  }
-  const browser = await chromium.launch({ headless: true });
-  globalForBrowser.pwBrowser = browser;
-  return browser;
-}
 
 export interface RenderResult {
   absPath: string;
@@ -110,11 +98,4 @@ export async function renderHtmlToPng(opts: {
   await fs.writeFile(absPath, buffer);
 
   return { absPath, filename, width, height, buffer, issues };
-}
-
-export async function closeBrowser(): Promise<void> {
-  if (globalForBrowser.pwBrowser) {
-    await globalForBrowser.pwBrowser.close();
-    globalForBrowser.pwBrowser = undefined;
-  }
 }

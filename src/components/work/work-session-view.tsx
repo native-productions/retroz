@@ -50,7 +50,7 @@ export function WorkSessionView({
   onHideCanvas,
   onNewProject,
   onNewSession,
-  researchAvailable,
+  searchAvailable,
 }: {
   detail: WorkSessionDetail | null;
   /** Scope for the canvas's "Add to bundle" action. */
@@ -66,7 +66,7 @@ export function WorkSessionView({
   onNewProject: () => void;
   onNewSession: () => void;
   /** False when no Tavily key is saved — the composer hides the picker. */
-  researchAvailable: boolean;
+  searchAvailable: boolean;
 }) {
   const router = useRouter();
   const sessionId = detail?.id ?? null;
@@ -86,6 +86,7 @@ export function WorkSessionView({
   const [researchMode, setResearchMode] = React.useState<ResearchMode>(
     detail?.researchMode ?? "AUTO",
   );
+  const [browseWeb, setBrowseWeb] = React.useState(detail?.browseWeb ?? true);
 
   const stream = useWorkStream(runId);
 
@@ -193,6 +194,7 @@ export function WorkSessionView({
     text: string,
     mentions: WorkMention[],
     research: ResearchMode,
+    browse: boolean,
   ) {
     if (!sessionId || busy) return;
     const res = await sendWorkMessage({
@@ -205,6 +207,7 @@ export function WorkSessionView({
         relPath: a.relPath,
       })),
       researchMode: research,
+      browseWeb: browse,
     });
     setPending((prev) => [
       ...prev,
@@ -279,7 +282,9 @@ export function WorkSessionView({
         onAspectRatioChange={changeAspectRatio}
         researchMode={researchMode}
         onResearchModeChange={setResearchMode}
-        researchAvailable={researchAvailable}
+        searchAvailable={searchAvailable}
+        browseWeb={browseWeb}
+        onBrowseWebChange={setBrowseWeb}
         railHidden={railHidden}
         canvasHidden={canvasHidden}
         onShowRail={onShowRail}

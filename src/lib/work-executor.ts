@@ -18,6 +18,8 @@ import {
   type ToolDef,
 } from "@/lib/run-tools";
 import { RESEARCH_TOOLS } from "@/lib/research-tools";
+import { BROWSE_TOOLS } from "@/lib/browse-tools";
+import { extractUrls } from "@/lib/url-guard";
 import { isTavilyConfigured } from "@/lib/tavily";
 import {
   registerRunController,
@@ -97,13 +99,19 @@ export async function executeWorkTurn(taskRunId: string): Promise<void> {
   const assetMentions = mentions.filter((m) => m.kind !== "render");
   const renderMentions = mentions.filter((m) => m.kind === "render");
 
-  // Research is a per-turn choice made in the composer. Null hides the web tools
-  // completely; rows written before the setting existed read as AUTO.
+  // Two independent per-turn choices, because the capabilities share nothing:
+  // research is Tavily over HTTP and needs an API key; browsing is a local
+  // Playwright browser and needs none. A false value hides that tool set
+  // completely. Rows written before either setting existed read as the default.
   const requestedResearch = message?.researchMode ?? "AUTO";
   const research =
     requestedResearch !== "OFF" && (await isTavilyConfigured())
       ? requestedResearch
       : null;
+  const browse = message?.browseWeb ?? true;
+  // Links the user pasted, named in the browsing directive so the agent opens
+  // them instead of guessing at them.
+  const urls = browse ? extractUrls(message?.text ?? "") : [];
 
   // One folder per session, so renders accumulate as the conversation goes. The
   // first turn names it; later turns reuse whatever that run recorded.
@@ -128,6 +136,9 @@ export async function executeWorkTurn(taskRunId: string): Promise<void> {
 
   const workspace = await openRunWorkspace(taskRunId, outputRelPath);
   const outDirAbs = workspace.outDirAbs;
+  // Web captures are working material, not output: scratch() is the directory
+  // the workspace deliberately does not upload on close.
+  const webDirAbs = browse ? await workspace.scratch("web") : null;
 
   // --- images the agent can reach ---------------------------------------
   // The session's own uploads and the workflow's global bank are always staged.
@@ -386,6 +397,8 @@ export async function executeWorkTurn(taskRunId: string): Promise<void> {
     inlinedSkills,
     aspectRule,
     research,
+    browse,
+    urls,
     message: message?.text ?? "",
   });
 
@@ -413,6 +426,8 @@ export async function executeWorkTurn(taskRunId: string): Promise<void> {
       : null,
     aspectRule,
     research,
+    browse,
+    urls,
     message: message?.text ?? "",
   });
 
@@ -421,6 +436,7 @@ export async function executeWorkTurn(taskRunId: string): Promise<void> {
     provider,
     outDirAbs,
     outPrefix: outputRelPath,
+    webDirAbs,
     fontFaceCss,
     assets,
     importTarget,
@@ -444,6 +460,7 @@ export async function executeWorkTurn(taskRunId: string): Promise<void> {
   const tools = [
     ...(RUN_TOOLS as unknown as ToolDef<unknown>[]),
     ...(research ? RESEARCH_TOOLS : []),
+    ...(browse ? (BROWSE_TOOLS as unknown as ToolDef<unknown>[]) : []),
   ];
 
   const mcpToken =
@@ -454,9 +471,14 @@ export async function executeWorkTurn(taskRunId: string): Promise<void> {
       prompt: resume ? turnPrompt : fullPrompt,
       model,
       cwd: outDirAbs,
-      // The revision copies live outside the output folder on purpose (they must
-      // not be published), so they have to be granted explicitly.
-      additionalDirectories: [outDirAbs, ...revisionDirs],
+      // The revision copies and web captures live outside the output folder on
+      // purpose (they must not be published), so they have to be granted
+      // explicitly or the agent cannot read back what it just made.
+      additionalDirectories: [
+        outDirAbs,
+        ...revisionDirs,
+        ...(webDirAbs ? [webDirAbs] : []),
+      ],
       tools,
       toolContext,
       baseTools: WORK_BASE_TOOLS,

@@ -145,6 +145,8 @@ export interface WorkSessionDetail {
   /** Research choice of the last turn — the composer reopens on it, so the
    *  setting feels sticky without being a session-level column. */
   researchMode: ResearchMode;
+  /** Browsing-agent choice of the last turn, sticky the same way. */
+  browseWeb: boolean;
   status: WorkSessionStatus;
   /** The turn still in flight, if any — the client streams this one. */
   liveRunId: string | null;
@@ -256,6 +258,7 @@ export async function getWorkSessionDetail(
     aspectRatio: session.aspectRatio,
     researchMode:
       session.messages.at(-1)?.researchMode ?? ("AUTO" as ResearchMode),
+    browseWeb: session.messages.at(-1)?.browseWeb ?? true,
     status: statusOfRun(lastRun?.status),
     liveRunId: liveRun?.id ?? null,
     messages,

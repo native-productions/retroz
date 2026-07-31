@@ -1,24 +1,15 @@
 "use client";
 
 import * as React from "react";
-import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
-import {
-  ArrowUp,
-  Check,
-  Frame,
-  ImagePlus,
-  LoaderCircle,
-  Square,
-  X,
-} from "lucide-react";
+import { ArrowUp, ImagePlus, LoaderCircle, Square, X } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { Button } from "@/components/ui/ui-button";
 import {
   WorkTriggerMenu,
   type MentionAnchor,
 } from "@/components/work/work-mention-menu";
-import { WorkResearchPicker } from "@/components/work/work-research-picker";
-import { ASPECT_RATIOS, findAspectRatio } from "@/lib/aspect-ratios";
+import { WorkWebPicker } from "@/components/work/work-web-picker";
+import { WorkBrowseToggle } from "@/components/work/work-browse-toggle";
 import type { ResearchMode } from "@/lib/research";
 import type {
   WorkAttachment,
@@ -194,16 +185,18 @@ export const WorkComposer = React.forwardRef<
       text: string,
       mentions: WorkMention[],
       researchMode: ResearchMode,
+      browseWeb: boolean,
     ) => void;
     onStop?: () => void;
     busy?: boolean;
-    /** Locked render shape for this session; null lets the agent choose. */
-    aspectRatio: string | null;
-    onAspectRatioChange: (id: string | null) => void;
-    /** Per-message research choice. Hidden when no Tavily key is saved. */
+    /** Per-message Tavily search choice. */
     researchMode: ResearchMode;
     onResearchModeChange: (mode: ResearchMode) => void;
-    researchAvailable: boolean;
+    /** False when no Tavily key is saved — hides the search picker only. */
+    searchAvailable: boolean;
+    /** Per-message browsing agent (read_web_page). Needs no API key. */
+    browseWeb: boolean;
+    onBrowseWebChange: (next: boolean) => void;
   }
 >(function WorkComposer(
   {
@@ -217,11 +210,11 @@ export const WorkComposer = React.forwardRef<
     onSubmit,
     onStop,
     busy = false,
-    aspectRatio,
-    onAspectRatioChange,
     researchMode,
     onResearchModeChange,
-    researchAvailable,
+    searchAvailable,
+    browseWeb,
+    onBrowseWebChange,
   },
   ref,
 ) {
@@ -398,7 +391,7 @@ export const WorkComposer = React.forwardRef<
     draftsRef.current[sessionId] = "";
     setTrigger(null);
     setEmpty(true);
-    onSubmit(text, mentions, researchMode);
+    onSubmit(text, mentions, researchMode, browseWeb);
   }
 
   function handleKeyDown(e: React.KeyboardEvent<HTMLDivElement>) {
@@ -573,19 +566,13 @@ export const WorkComposer = React.forwardRef<
                 e.target.value = "";
               }}
             />
-            <AspectRatioPicker
-              value={aspectRatio}
-              onChange={onAspectRatioChange}
-            />
-            {researchAvailable ? (
-              <WorkResearchPicker
+            {searchAvailable ? (
+              <WorkWebPicker
                 value={researchMode}
                 onChange={onResearchModeChange}
               />
             ) : null}
-            <p className="hidden font-mono text-[10px] uppercase tracking-[0.08em] text-fg-muted/70 lg:block">
-              ⌘V image · @ image · / skill · ⏎ send
-            </p>
+            <WorkBrowseToggle value={browseWeb} onChange={onBrowseWebChange} />
           </div>
 
           {busy && onStop ? (
@@ -624,113 +611,6 @@ export const WorkComposer = React.forwardRef<
     </div>
   );
 });
-
-/**
- * Locks every render in this session to one shape. It lives in the composer
- * rather than the session header because it is part of framing the request, and
- * because a carousel is only usable when its slides agree — the bundle editor
- * flags the mismatch afterwards, this prevents it up front.
- */
-function AspectRatioPicker({
-  value,
-  onChange,
-}: {
-  value: string | null;
-  onChange: (id: string | null) => void;
-}) {
-  const active = findAspectRatio(value);
-
-  return (
-    <DropdownMenu.Root>
-      <DropdownMenu.Trigger asChild>
-        <button
-          type="button"
-          title="Render shape"
-          aria-label={`Render shape: ${active ? active.label : "auto"}`}
-          className={cn(
-            "flex h-8 items-center gap-1.5 rounded-[var(--radius-retro)] border-2 px-2 outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring active:scale-95",
-            active
-              ? "border-border bg-surface-2 text-fg"
-              : "border-transparent text-fg-muted hover:border-border hover:bg-surface-2 hover:text-fg",
-            "data-[state=open]:border-border data-[state=open]:bg-surface-2",
-          )}
-        >
-          <Frame className="size-4 shrink-0" />
-          <span className="font-mono text-[11px] font-semibold">
-            {active ? active.label : "Auto"}
-          </span>
-        </button>
-      </DropdownMenu.Trigger>
-
-      <DropdownMenu.Portal>
-        <DropdownMenu.Content
-          align="start"
-          side="top"
-          sideOffset={8}
-          className="retro-card z-50 min-w-[13rem] p-1 shadow-hard-lg"
-        >
-          <DropdownMenu.Label className="px-2 pb-1 pt-1.5 font-mono text-[10px] uppercase tracking-widest text-fg-muted/70">
-            Render shape
-          </DropdownMenu.Label>
-
-          <RatioRow
-            label="Auto"
-            hint="Agent picks per image"
-            selected={!active}
-            onSelect={() => onChange(null)}
-          />
-          <DropdownMenu.Separator className="my-1 h-0.5 bg-border-soft" />
-          {ASPECT_RATIOS.map((ratio) => (
-            <RatioRow
-              key={ratio.id}
-              label={ratio.label}
-              hint={`${ratio.hint} · ${ratio.width}×${ratio.height}`}
-              selected={active?.id === ratio.id}
-              onSelect={() => onChange(ratio.id)}
-            />
-          ))}
-        </DropdownMenu.Content>
-      </DropdownMenu.Portal>
-    </DropdownMenu.Root>
-  );
-}
-
-function RatioRow({
-  label,
-  hint,
-  selected,
-  onSelect,
-}: {
-  label: string;
-  hint: string;
-  selected: boolean;
-  onSelect: () => void;
-}) {
-  return (
-    <DropdownMenu.Item
-      onSelect={onSelect}
-      className={cn(
-        "flex cursor-pointer select-none items-center gap-2.5 rounded-[4px] px-2 py-1.5 outline-none data-[highlighted]:bg-secondary data-[highlighted]:text-secondary-fg",
-        selected ? "text-fg" : "text-fg-muted",
-      )}
-    >
-      <span
-        className={cn(
-          "w-11 shrink-0 font-mono text-xs",
-          selected && "font-semibold",
-        )}
-      >
-        {label}
-      </span>
-      <span className="min-w-0 flex-1 truncate font-mono text-[10px] opacity-70">
-        {hint}
-      </span>
-      {selected ? (
-        <Check className="size-3.5 shrink-0" strokeWidth={3} />
-      ) : null}
-    </DropdownMenu.Item>
-  );
-}
 
 function AttachmentTile({
   attachment,

@@ -239,6 +239,9 @@ export async function executeRun(taskRunId: string): Promise<void> {
     provider,
     outDirAbs,
     outPrefix: outputRelPath,
+    // Browsing is a Work-session capability; scheduled task runs stay on the
+    // research tools, so there is nothing to write captures into.
+    webDirAbs: null,
     fontFaceCss,
     assets,
     // A photo the agent sources mid-run joins the task's own folder, so the

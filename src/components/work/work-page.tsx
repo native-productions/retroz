@@ -14,7 +14,7 @@ import { isTavilyConfigured } from "@/lib/tavily";
  * Shared by `/work` and `/work/[sessionId]` so both routes stay one-liners.
  */
 export async function WorkPage({ sessionId }: { sessionId?: string }) {
-  const [projects, sessions, workflows, researchAvailable] = await Promise.all([
+  const [projects, sessions, workflows, searchAvailable] = await Promise.all([
     listWorkProjects(),
     listWorkSessions(),
     listWorkflowOptions(),
@@ -35,7 +35,7 @@ export async function WorkPage({ sessionId }: { sessionId?: string }) {
       workflows={workflows}
       bundles={bundles}
       detail={detail}
-      researchAvailable={researchAvailable}
+      searchAvailable={searchAvailable}
     />
   );
 }

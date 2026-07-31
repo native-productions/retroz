@@ -16,6 +16,7 @@ import {
   WorkComposer,
   type WorkComposerHandle,
 } from "@/components/work/work-composer";
+import { WorkAspectPicker } from "@/components/work/work-aspect-picker";
 import type { ResearchMode } from "@/lib/research";
 import type {
   WorkAttachment,
@@ -56,7 +57,9 @@ export function WorkConversation({
   onAspectRatioChange,
   researchMode,
   onResearchModeChange,
-  researchAvailable,
+  searchAvailable,
+  browseWeb,
+  onBrowseWebChange,
   railHidden,
   canvasHidden,
   onShowRail,
@@ -83,6 +86,7 @@ export function WorkConversation({
     text: string,
     mentions: WorkMention[],
     researchMode: ResearchMode,
+    browseWeb: boolean,
   ) => void;
   onStop: () => void;
   busy: boolean;
@@ -90,7 +94,9 @@ export function WorkConversation({
   onAspectRatioChange: (id: string | null) => void;
   researchMode: ResearchMode;
   onResearchModeChange: (mode: ResearchMode) => void;
-  researchAvailable: boolean;
+  searchAvailable: boolean;
+  browseWeb: boolean;
+  onBrowseWebChange: (next: boolean) => void;
   railHidden: boolean;
   canvasHidden: boolean;
   onShowRail: () => void;
@@ -130,18 +136,26 @@ export function WorkConversation({
           </p>
         </div>
 
+        {/* Session-scoped settings live together here: both persist the moment
+            they change, unlike the per-message controls in the composer. */}
         {sessionId ? (
-          <Select value={model} onValueChange={onModelChange}>
-            <SelectTrigger
-              aria-label="Model"
-              className="h-8 w-auto min-w-[7.5rem] font-mono text-xs"
-            >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <ModelSelectOptions />
-            </SelectContent>
-          </Select>
+          <>
+            <Select value={model} onValueChange={onModelChange}>
+              <SelectTrigger
+                aria-label="Model"
+                className="h-8 w-auto min-w-[7.5rem] font-mono text-xs"
+              >
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <ModelSelectOptions />
+              </SelectContent>
+            </Select>
+            <WorkAspectPicker
+              value={aspectRatio}
+              onChange={onAspectRatioChange}
+            />
+          </>
         ) : null}
 
         {canvasHidden && sessionId ? (
@@ -204,11 +218,11 @@ export function WorkConversation({
             onSubmit={onSubmit}
             onStop={onStop}
             busy={busy}
-            aspectRatio={aspectRatio}
-            onAspectRatioChange={onAspectRatioChange}
             researchMode={researchMode}
             onResearchModeChange={onResearchModeChange}
-            researchAvailable={researchAvailable}
+            searchAvailable={searchAvailable}
+            browseWeb={browseWeb}
+            onBrowseWebChange={onBrowseWebChange}
           />
         </div>
       ) : null}

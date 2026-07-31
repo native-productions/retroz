@@ -177,6 +177,8 @@ export const workSendMessageSchema = z.object({
   // action keeps only the ones no earlier turn already handed over.
   attachments: z.array(workMentionSchema).max(40).default([]),
   researchMode: researchModeEnum.default("AUTO"),
+  // The browsing agent, independent of researchMode — see WorkMessage.browseWeb.
+  browseWeb: z.boolean().default(true),
 });
 
 // Bundles are only ever assembled from renders the project already has, so the
