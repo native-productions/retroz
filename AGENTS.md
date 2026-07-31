@@ -71,6 +71,8 @@ src/
     codex-backend.ts    Codex CLI backend (codex-sdk thread, HTTP MCP)
     run-tools.ts        shared retroz tool defs (render/list/search) + per-run
                         token registry for the HTTP MCP route
+    caption-tools.ts    save_caption — the Work-only tool that writes the post
+                        copy + up to 5 hashtags onto the WorkSession
     png-compositor.ts   Playwright HTML→PNG (renders via file:// temp html)
     render-revision.ts  stages a finished render for editing: its stored HTML
                         (RenderSource) + PNG on disk, photo paths rehomed

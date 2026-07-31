@@ -17,6 +17,7 @@ import {
   type RunToolContext,
   type ToolDef,
 } from "@/lib/run-tools";
+import { CAPTION_TOOLS } from "@/lib/caption-tools";
 import { RESEARCH_TOOLS } from "@/lib/research-tools";
 import { BROWSE_TOOLS } from "@/lib/browse-tools";
 import { extractUrls } from "@/lib/url-guard";
@@ -373,6 +374,19 @@ export async function executeWorkTurn(taskRunId: string): Promise<void> {
   // takes effect on the next render rather than the next session.
   const aspectRule = aspectRatioRule(session.aspectRatio);
 
+  // What earlier turns produced. The workspace hydrates these back into the
+  // output folder, so they are on disk either way — this is what makes the agent
+  // aware of them when the resumed engine session no longer remembers.
+  // Newest write of a filename wins, exactly like the canvas does it.
+  const priorArtifacts = await db.runArtifact.findMany({
+    where: { taskRun: { taskId: run.taskId }, kind: "PNG" },
+    orderBy: { createdAt: "asc" },
+    select: { filename: true, width: true, height: true },
+  });
+  const sessionRenders = [
+    ...new Map(priorArtifacts.map((a) => [a.filename, a])).values(),
+  ];
+
   const fullPrompt = buildWorkPrompt({
     provider,
     workflowName: workflow.name,
@@ -383,6 +397,7 @@ export async function executeWorkTurn(taskRunId: string): Promise<void> {
     outDirAbs,
     mentioned,
     revisions,
+    sessionRenders,
     available,
     fonts: fonts.map((f) => ({
       family: f.family,
@@ -420,6 +435,7 @@ export async function executeWorkTurn(taskRunId: string): Promise<void> {
   const turnPrompt = buildWorkTurnPrompt({
     mentioned,
     revisions,
+    sessionRenders,
     inlinedSkills,
     revisedBrief: briefChanged
       ? { projectName: project.name, instruction: project.instruction }
@@ -440,6 +456,7 @@ export async function executeWorkTurn(taskRunId: string): Promise<void> {
     fontFaceCss,
     assets,
     importTarget,
+    workSessionId: session.id,
     record,
   };
 
@@ -459,6 +476,7 @@ export async function executeWorkTurn(taskRunId: string): Promise<void> {
 
   const tools = [
     ...(RUN_TOOLS as unknown as ToolDef<unknown>[]),
+    ...(CAPTION_TOOLS as unknown as ToolDef<unknown>[]),
     ...(research ? RESEARCH_TOOLS : []),
     ...(browse ? (BROWSE_TOOLS as unknown as ToolDef<unknown>[]) : []),
   ];

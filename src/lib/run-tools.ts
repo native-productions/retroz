@@ -60,6 +60,12 @@ export interface RunToolContext {
   fontFaceCss: string;
   assets: RunToolAsset[];
   importTarget: ImportTarget | null;
+  /**
+   * The Work session this run is a turn of. Null for scheduled task runs, which
+   * have no conversation to hang a caption on — that is what disables
+   * `save_caption` (see lib/caption-tools.ts).
+   */
+  workSessionId?: string | null;
   record: (type: RunEventType, payload: unknown) => Promise<void>;
 }
 

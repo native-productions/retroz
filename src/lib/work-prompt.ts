@@ -2,6 +2,7 @@ import type { AgentProvider } from "@/generated/prisma/enums";
 import { researchDirective } from "@/lib/research-tools";
 import { layoutContract } from "@/lib/render-guard";
 import type { ResearchMode } from "@/lib/research";
+import { CAPTION_TAG_LIMIT } from "@/lib/work-types";
 
 // Prompts for the Work playground. Unlike a task run — one instruction, one
 // batch of images, done — Work is a conversation: the first turn establishes the
@@ -88,6 +89,15 @@ to re-capture the page.
 `;
 }
 
+/**
+ * One caption per session, always describing the images as they stand now. It is
+ * restated on later turns because a resumed session tends to treat the caption as
+ * a job it already did, and a revision silently leaves the old copy on screen.
+ */
+const captionRule = `   The caption always describes the CURRENT set of images, so call "save_caption"
+   again after any change to them — a new slide, a rewritten headline, a dropped
+   image. Each call replaces the previous caption.`;
+
 export interface WorkPromptInput {
   provider: AgentProvider;
   workflowName: string;
@@ -100,6 +110,8 @@ export interface WorkPromptInput {
   mentioned: WorkAsset[];
   /** Finished renders the user pointed at — a request to edit, not to compose. */
   revisions: RevisionForPrompt[];
+  /** Everything this session has rendered so far, newest write per filename. */
+  sessionRenders: SessionRender[];
   /** Everything else reachable through list_assets / search_assets. */
   available: WorkAsset[];
   fonts: FontForPrompt[];
@@ -135,6 +147,36 @@ function mentionBlock(mentioned: WorkAsset[]): string {
 The user referenced these with @. Treat them as the intended material unless the
 message says otherwise.
 ${assetLines(mentioned)}
+`;
+}
+
+/** A PNG this session already produced, sitting in the agent's working directory. */
+export interface SessionRender {
+  filename: string;
+  width: number | null;
+  height: number | null;
+}
+
+/**
+ * What the session has already produced. The files are hydrated back into the
+ * output folder on every turn, but the agent only knows that if it is told: a
+ * resumed engine session can be dropped (restart, cleared history), and the cold
+ * prompt that replaces it would otherwise open with no idea the images exist.
+ */
+export function sessionRendersBlock(renders: SessionRender[]): string {
+  if (renders.length === 0) return "";
+  const lines = renders
+    .map((r) => {
+      const size = r.width && r.height ? ` (${r.width}x${r.height})` : "";
+      return `  - ${r.filename}${size}`;
+    })
+    .join("\n");
+  return `\n=== IMAGES THIS SESSION HAS ALREADY PRODUCED ===
+These PNGs are in your working directory right now, from earlier turns. They are
+what the user is looking at, so treat them as the current state of the work: they
+are what a caption describes, what "the second slide" refers to, and what a
+request to change something applies to. Read one before you describe or revise it.
+${lines}
 `;
 }
 
@@ -215,6 +257,7 @@ export function buildWorkPrompt(input: WorkPromptInput): string {
     outDirAbs,
     mentioned,
     revisions,
+    sessionRenders,
     available,
     fonts,
     pairings,
@@ -293,7 +336,9 @@ ${projectInstruction || "(no brief written yet — fall back on the channel inst
 === CHANNEL INSTRUCTION (${workflowName}) ===
 Applies to every project on this channel.
 ${globalInstruction || "(none)"}
-${mentionBlock(mentioned)}${revisionBlock(revisions)}${availableBlock}
+${mentionBlock(mentioned)}${revisionBlock(revisions)}${sessionRendersBlock(
+    sessionRenders,
+  )}${availableBlock}
 === AVAILABLE FONTS ===
 These fonts are pre-loaded — use them in CSS via font-family; do NOT @font-face
 them yourself, the renderer injects the faces for you.
@@ -359,10 +404,18 @@ ${step(7)}. IF THE RENDER IS REJECTED, fix it before moving on. The tool reports
 ${step(8)}. Give each image a clear, ordered filename ("01-hook.png"). Re-rendering the
    same filename replaces that image — do that when the user asks for a revision,
    and use a new filename for a genuinely new image.
+${step(9)}. WRITE THE CAPTION LAST. Once every image for the request has rendered clean,
+   call "save_caption" with the post copy and three to ${CAPTION_TAG_LIMIT} hashtags. The user posts
+   this text as-is, so write it in the brief's language and voice — a hook first
+   line, the substance, then a call to action if one fits. Do not write the
+   hashtags into the caption; they are a separate argument.
+${captionRule}
 
 === OUTPUT CONTRACT ===
 - Write ALL PNGs into this session's folder: ${outDirAbs}
   (pass just a filename to render_html_to_png, not a path).
+- The caption belongs in "save_caption", not in your reply — the user reads it
+  above the renders.
 - Reply conversationally and briefly: what you made and the choices worth
   knowing. No status-report formatting, no restating the request.
 - If the request is ambiguous in a way that changes the design, ask instead of
@@ -381,6 +434,8 @@ ${message}`;
 export function buildWorkTurnPrompt(input: {
   mentioned: WorkAsset[];
   revisions: RevisionForPrompt[];
+  /** Restated every turn: a resumed session can be dropped mid-conversation. */
+  sessionRenders: SessionRender[];
   inlinedSkills: InlinedSkill[];
   /** Set only when the brief changed since the last turn — see work-executor. */
   revisedBrief: { projectName: string; instruction: string } | null;
@@ -417,10 +472,16 @@ whatever earlier turns said.
 Browsing is off for this message. Do not call "read_web_page", whatever earlier
 turns said. Any page screenshot from an earlier turn is gone.
 `;
+  const caption = `\n=== CAPTION ===
+If this turn produces or changes any image, call "save_caption" afterwards with
+copy for the current set and three to ${CAPTION_TAG_LIMIT} hashtags. The saved caption describes the
+images as they were before this turn, so leaving it is leaving something wrong on
+the user's screen.
+`;
   return `${mentionBlock(input.mentioned)}${revisionBlock(
     input.revisions,
-  )}${brief}${inlinedSkillBlock(
+  )}${sessionRendersBlock(input.sessionRenders)}${brief}${inlinedSkillBlock(
     input.inlinedSkills,
-  )}${research}${browse}${size}
+  )}${research}${browse}${caption}${size}
 ${input.message}`.trim();
 }

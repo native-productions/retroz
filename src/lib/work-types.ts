@@ -125,6 +125,19 @@ export interface WorkResult {
 /** Instagram refuses a carousel longer than this. */
 export const CAROUSEL_LIMIT = 20;
 
+/** Hashtags kept per caption. More than a handful reads as spam. */
+export const CAPTION_TAG_LIMIT = 5;
+
+/** Instagram truncates a caption past this. */
+export const CAPTION_MAX_CHARS = 2200;
+
+/** Ready-to-post copy for the images a session produced. */
+export interface WorkCaption {
+  text: string;
+  /** Hashtags without the leading `#`, at most CAPTION_TAG_LIMIT of them. */
+  tags: string[];
+}
+
 /** One render in the project gallery, or one slide inside a bundle. */
 export interface WorkRender {
   /** The RunArtifact id — what bundle items point at. */

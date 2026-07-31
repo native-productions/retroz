@@ -5,7 +5,12 @@ import { useRouter } from "next/navigation";
 import { WorkConversation } from "@/components/work/work-conversation";
 import { WorkCanvas } from "@/components/work/work-canvas";
 import { useWorkStream } from "@/components/work/use-work-stream";
-import { eventToMessage, planFromEvents, timeLabel } from "@/lib/work-events";
+import {
+  captionFromEvents,
+  eventToMessage,
+  planFromEvents,
+  timeLabel,
+} from "@/lib/work-events";
 import { mediaUrl } from "@/lib/media";
 import { deleteAsset } from "@/lib/actions/asset-actions";
 import { stopRun } from "@/lib/actions/task-actions";
@@ -31,6 +36,16 @@ interface UploadedAsset {
   filename: string;
   relPath: string;
 }
+
+/**
+ * What the canvas's "Generate caption" button sends. It goes in as an ordinary
+ * user turn — visible in the conversation, undoable by asking for something else
+ * — rather than a hidden side channel, so the transcript stays the whole story.
+ */
+const CAPTION_REQUEST =
+  "Write the social caption for the images in this session. Do not render or " +
+  "change any image — just call save_caption with the post copy and three to " +
+  "five hashtags.";
 
 /**
  * One open session: the conversation column and the canvas beside it. Mounted
@@ -142,6 +157,13 @@ export function WorkSessionView({
     return live.length > 0 ? live : (detail?.plan ?? []);
   }, [stream.events, detail?.plan]);
 
+  // The caption the running turn just saved outranks the stored one, which is
+  // still describing the images as they were before this turn.
+  const caption = React.useMemo(
+    () => captionFromEvents(stream.events) ?? detail?.caption ?? null,
+    [stream.events, detail?.caption],
+  );
+
   const busy =
     Boolean(runId) &&
     (stream.status === null ||
@@ -190,24 +212,22 @@ export function WorkSessionView({
     router.refresh();
   }
 
-  async function submit(
-    text: string,
-    mentions: WorkMention[],
-    research: ResearchMode,
-    browse: boolean,
-  ) {
+  async function send(input: {
+    text: string;
+    mentions: WorkMention[];
+    attachments: { name: string; assetId: string; relPath: string }[];
+    research: ResearchMode;
+    browse: boolean;
+  }) {
     if (!sessionId || busy) return;
+    const { text, mentions } = input;
     const res = await sendWorkMessage({
       sessionId,
       text,
       mentions,
-      attachments: attachments.map((a) => ({
-        name: a.name,
-        assetId: a.id,
-        relPath: a.relPath,
-      })),
-      researchMode: research,
-      browseWeb: browse,
+      attachments: input.attachments,
+      researchMode: input.research,
+      browseWeb: input.browse,
     });
     setPending((prev) => [
       ...prev,
@@ -225,6 +245,41 @@ export function WorkSessionView({
       },
     ]);
     setRunId(res.runId);
+  }
+
+  async function submit(
+    text: string,
+    mentions: WorkMention[],
+    research: ResearchMode,
+    browse: boolean,
+  ) {
+    await send({
+      text,
+      mentions,
+      attachments: attachments.map((a) => ({
+        name: a.name,
+        assetId: a.id,
+        relPath: a.relPath,
+      })),
+      research,
+      browse,
+    });
+  }
+
+  /**
+   * Caption-only turn: no new images, so the composer's tray stays out of it.
+   * The research and browsing choices are carried over rather than forced off —
+   * the composer reopens on whatever the last turn used, and a button press
+   * should not quietly flip settings the user picked.
+   */
+  async function generateCaption() {
+    await send({
+      text: CAPTION_REQUEST,
+      mentions: [],
+      attachments: [],
+      research: researchMode,
+      browse: browseWeb,
+    });
   }
 
   async function stop() {
@@ -296,10 +351,13 @@ export function WorkSessionView({
       {canvasHidden || !sessionId ? null : (
         <WorkCanvas
           plan={plan}
+          caption={caption}
           results={results}
           projectId={projectId}
           bundles={bundles}
           sessionTitle={detail?.title ?? ""}
+          busy={busy}
+          onGenerateCaption={generateCaption}
           onCollapse={onHideCanvas}
         />
       )}

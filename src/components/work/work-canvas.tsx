@@ -15,12 +15,14 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { Lightbox } from "@/components/run/image-lightbox";
+import { WorkCaptionPanel } from "@/components/work/work-caption";
 import {
   addArtifactsToBundle,
   createWorkBundle,
 } from "@/lib/actions/work-bundle-actions";
 import type {
   WorkBundleSummary,
+  WorkCaption,
   WorkPlanStep,
   WorkResult,
 } from "@/lib/work-types";
@@ -33,18 +35,26 @@ const MOTION = "duration-200 ease-[cubic-bezier(0.23,1,0.32,1)]";
  */
 export function WorkCanvas({
   plan,
+  caption,
   results,
   projectId,
   bundles,
   sessionTitle,
+  busy,
+  onGenerateCaption,
   onCollapse,
 }: {
   plan: WorkPlanStep[];
+  /** Post copy for the current renders, null until the agent writes one. */
+  caption: WorkCaption | null;
   results: WorkResult[];
   /** Scope for "Add to bundle". Null before a project is resolved. */
   projectId: string | null;
   bundles: WorkBundleSummary[];
   sessionTitle: string;
+  /** True while a turn is running — the caption request has to wait its turn. */
+  busy: boolean;
+  onGenerateCaption: () => void;
   onCollapse: () => void;
 }) {
   const [planOpen, setPlanOpen] = React.useState(true);
@@ -58,7 +68,7 @@ export function WorkCanvas({
         <div className="min-w-0">
           <p className="font-display text-sm font-bold leading-none">Canvas</p>
           <p className="mt-1.5 font-mono text-[9px] uppercase leading-none tracking-[0.08em] text-fg-muted">
-            Plan &amp; renders
+            Plan, caption &amp; renders
           </p>
         </div>
         <button
@@ -123,6 +133,13 @@ export function WorkCanvas({
           </div>
         </div>
       </section>
+
+      <WorkCaptionPanel
+        caption={caption}
+        hasRenders={results.length > 0}
+        busy={busy}
+        onGenerate={onGenerateCaption}
+      />
 
       <div className="flex items-center justify-between gap-2 px-3.5 py-2.5">
         <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-fg-muted/70">

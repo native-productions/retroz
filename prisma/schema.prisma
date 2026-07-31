@@ -583,6 +583,13 @@ model WorkSession {
   // Locks every render of this session to one shape (see lib/aspect-ratios.ts).
   // Null lets the agent choose per image, which is the old behaviour.
   aspectRatio     String?
+  // The social caption the agent writes for the images this session produced,
+  // rewritten whenever the set of images changes. Null until it writes one —
+  // every session created before captions existed reads as "not written yet".
+  caption         String?
+  // Hashtags for that caption, without the leading "#". Capped at five in the
+  // tool that writes them (lib/caption-tools.ts).
+  captionTags     String[] @default([])
   archived        Boolean  @default(false)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt

@@ -10,6 +10,7 @@ import type { ResearchMode } from "@/lib/research";
 import type {
   WorkAccent,
   WorkAttachment,
+  WorkCaption,
   WorkMention,
   WorkMessage,
   WorkPlanStep,
@@ -156,6 +157,8 @@ export interface WorkSessionDetail {
   skillSlugs: string[];
   results: WorkResult[];
   plan: WorkPlanStep[];
+  /** Post copy for the current renders, null until the agent writes one. */
+  caption: WorkCaption | null;
 }
 
 /**
@@ -272,6 +275,9 @@ export async function getWorkSessionDetail(
     skillSlugs,
     results: [...byPath.values()],
     plan,
+    caption: session.caption
+      ? { text: session.caption, tags: session.captionTags }
+      : null,
   };
 }
 

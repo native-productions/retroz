@@ -1,7 +1,10 @@
-import type {
-  WorkMessage,
-  WorkPlanStep,
-  WorkStepStatus,
+import {
+  CAPTION_MAX_CHARS,
+  CAPTION_TAG_LIMIT,
+  type WorkCaption,
+  type WorkMessage,
+  type WorkPlanStep,
+  type WorkStepStatus,
 } from "@/lib/work-types";
 
 /**
@@ -54,6 +57,11 @@ export function describeTool(name: string, input: unknown): string {
   if (label === "TodoWrite") {
     const todos = Array.isArray(i.todos) ? i.todos : [];
     return `${todos.length} step${todos.length === 1 ? "" : "s"}`;
+  }
+  if (label === "save_caption") {
+    const caption = normalizeCaption(i.caption);
+    const head = caption.split("\n")[0];
+    return head.length > 80 ? `${head.slice(0, 77)}…` : head || "caption";
   }
   if (typeof i.command === "string") return i.command;
   if (typeof i.file_path === "string") return i.file_path;
@@ -122,6 +130,58 @@ export function eventsToMessages(
     if (row) rows.push(row);
   }
   return rows;
+}
+
+/** Trim and clamp a caption to what the platform will actually show. */
+export function normalizeCaption(value: unknown): string {
+  const text = typeof value === "string" ? value.trim() : "";
+  return text.length > CAPTION_MAX_CHARS
+    ? text.slice(0, CAPTION_MAX_CHARS).trimEnd()
+    : text;
+}
+
+/**
+ * Hashtags are stored bare, so they can be rendered with or without the `#`.
+ * Whatever the agent hands over — `#RetroDesign`, `retro design`, duplicates —
+ * comes out as a deduped list of at most CAPTION_TAG_LIMIT word-safe tags.
+ */
+export function normalizeTags(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  const seen = new Set<string>();
+  const tags: string[] = [];
+  for (const raw of value) {
+    if (typeof raw !== "string") continue;
+    const tag = raw
+      .trim()
+      .replace(/^#+/, "")
+      .replace(/[^\p{L}\p{N}_]+/gu, "");
+    if (!tag) continue;
+    const key = tag.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    tags.push(tag);
+    if (tags.length === CAPTION_TAG_LIMIT) break;
+  }
+  return tags;
+}
+
+/**
+ * The caption written during a turn, read back off its `save_caption` call — the
+ * same trick the plan panel uses for TodoWrite, so the canvas fills in live
+ * instead of waiting for the turn to finish and the page to refresh.
+ */
+export function captionFromEvents(events: WorkEvent[]): WorkCaption | null {
+  let latest: WorkCaption | null = null;
+  for (const event of events) {
+    if (event.type !== "TOOL") continue;
+    const payload = asRecord(event.payload);
+    if (toolLabel(String(payload.name ?? "")) !== "save_caption") continue;
+    const input = asRecord(payload.input);
+    const text = normalizeCaption(input.caption);
+    if (!text) continue;
+    latest = { text, tags: normalizeTags(input.tags) };
+  }
+  return latest;
 }
 
 const TODO_STATUS: Record<string, WorkStepStatus> = {
