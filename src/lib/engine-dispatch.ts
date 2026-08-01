@@ -1,7 +1,11 @@
 import "server-only";
 import { db } from "@/lib/db-client";
 import { resolveProviderModel } from "@/lib/models";
-import { resolveApiModel, type ResolvedApiModel } from "@/lib/provider-catalog";
+import {
+  resolveApiModel,
+  resolveDefaultProviderModelId,
+  type ResolvedApiModel,
+} from "@/lib/provider-catalog";
 import { runClaudeAgent } from "@/lib/claude-backend";
 import { runCodexAgent } from "@/lib/codex-backend";
 import { runApiAgent } from "@/lib/api-backend";
@@ -59,6 +63,13 @@ export async function selectEngine(input: {
         )
       : undefined;
 
+  // The same fallback the selectors show, so a run never disagrees with the
+  // model the user was looking at when they started it.
+  const defaultProviderModelId =
+    settings.engineMode === "PROVIDER"
+      ? await resolveDefaultProviderModelId(settings.defaultProviderModelId)
+      : null;
+
   const { provider, model } = resolveProviderModel({
     engineMode: settings.engineMode,
     pinnedProvider: input.pinnedProvider,
@@ -66,7 +77,7 @@ export async function selectEngine(input: {
     claudeDefault: settings.defaultModel,
     codexDefault: settings.codexModel,
     providerModelIds,
-    defaultProviderModelId: settings.defaultProviderModelId,
+    defaultProviderModelId,
   });
 
   if (provider !== "OPENAI_COMPAT") {
@@ -79,7 +90,7 @@ export async function selectEngine(input: {
       model,
       apiModel: null,
       error:
-        "No API provider model is configured. Add a provider and pick a default model in Settings.",
+        "No API provider model is available. Add a provider in Settings and fetch its models.",
     };
   }
 

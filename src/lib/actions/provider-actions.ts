@@ -9,6 +9,7 @@ import {
 } from "@/lib/provider-capabilities";
 import {
   fetchProviderModels as fetchModelsFromEndpoint,
+  resolveDefaultProviderModelId,
   type FetchModelsResult,
 } from "@/lib/provider-catalog";
 import {
@@ -119,12 +120,9 @@ export async function upsertProvider(input: unknown): Promise<{ id: string }> {
 
 export async function deleteProvider(id: string): Promise<void> {
   await db.apiProvider.delete({ where: { id } });
-  // Models cascade; the settings default may now point at a deleted row.
-  await db.appSetting.updateMany({
-    where: { id: "singleton", defaultProviderModelId: { not: null } },
-    data: { defaultProviderModelId: null },
-  });
-  await restoreDefaultProviderModel();
+  // Its models cascade. Only re-point the default if it was one of them —
+  // deleting a second provider must not disturb a default set on the first.
+  await ensureDefaultProviderModel();
   revalidatePath("/settings");
 }
 
@@ -132,6 +130,9 @@ export async function fetchProviderModels(
   providerId: string,
 ): Promise<FetchModelsResult> {
   const result = await fetchModelsFromEndpoint(providerId);
+  // First provider added: pick a default now rather than leaving the setting
+  // null and making the user find the picker before anything can run.
+  await ensureDefaultProviderModel();
   revalidatePath("/settings");
   return result;
 }
@@ -167,6 +168,7 @@ export async function addProviderModel(input: unknown): Promise<void> {
       source: "MANUAL",
     },
   });
+  await ensureDefaultProviderModel();
   revalidatePath("/settings");
 }
 
@@ -183,31 +185,29 @@ export async function deleteProviderModel(id: string): Promise<void> {
     where: { id: "singleton", defaultProviderModelId: id },
     data: { defaultProviderModelId: null },
   });
-  await restoreDefaultProviderModel();
+  await ensureDefaultProviderModel();
   revalidatePath("/settings");
 }
 
 /**
- * Keep a default model pointed at something real. PROVIDER mode with a null
- * default fails every run, and the most common way to get there is deleting the
- * row the default happened to point at.
+ * Keep the stored default pointed at a model that exists.
+ *
+ * Runs already fall back on their own (resolveDefaultProviderModelId), so this
+ * is not what makes them work — it is what makes the settings page show the
+ * same answer instead of an empty picker.
  */
-async function restoreDefaultProviderModel(): Promise<void> {
+async function ensureDefaultProviderModel(): Promise<void> {
   const setting = await db.appSetting.findUnique({
     where: { id: "singleton" },
     select: { defaultProviderModelId: true },
   });
-  if (setting?.defaultProviderModelId) return;
-
-  const fallback = await db.apiProviderModel.findFirst({
-    where: { provider: { enabled: true } },
-    orderBy: { createdAt: "asc" },
-    select: { id: true },
-  });
-  if (!fallback) return;
+  const resolved = await resolveDefaultProviderModelId(
+    setting?.defaultProviderModelId ?? null,
+  );
+  if (!resolved || resolved === setting?.defaultProviderModelId) return;
 
   await db.appSetting.updateMany({
     where: { id: "singleton" },
-    data: { defaultProviderModelId: fallback.id },
+    data: { defaultProviderModelId: resolved },
   });
 }

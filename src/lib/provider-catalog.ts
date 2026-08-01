@@ -77,6 +77,28 @@ function detectContextWindow(raw: Record<string, unknown>): number | null {
   return null;
 }
 
+/**
+ * Per-million-token prices from a listing entry, when it publishes them.
+ *
+ * OpenRouter reports `pricing.prompt` / `pricing.completion` as per-token
+ * decimal strings. Without these a run's cost is recorded as 0, so reading them
+ * is the difference between a usable spend figure and a blank one.
+ */
+function detectPricing(raw: Record<string, unknown>): {
+  inputPricePerM: number | null;
+  outputPricePerM: number | null;
+} {
+  const pricing = raw.pricing as Record<string, unknown> | undefined;
+  const perMillion = (value: unknown): number | null => {
+    const n = typeof value === "string" ? Number(value) : Number.NaN;
+    return Number.isFinite(n) && n > 0 ? n * 1_000_000 : null;
+  };
+  return {
+    inputPricePerM: perMillion(pricing?.prompt),
+    outputPricePerM: perMillion(pricing?.completion),
+  };
+}
+
 /** Model families in Google's catalog that cannot hold a text conversation. */
 const GOOGLE_NON_CHAT = /embedding|aqa|tts|imagen|veo|native-audio|live|image$/i;
 
@@ -205,11 +227,12 @@ export async function fetchProviderModels(
             ? isGoogleVisionModel(modelId)
             : detectVision(raw),
         contextWindow: detectContextWindow(raw),
+        ...detectPricing(raw),
         source: "FETCHED",
       },
       // A manual row keeps its hand-tuned label and vision flag; only the
-      // context window is refreshed, since that is pure metadata.
-      update: { contextWindow: detectContextWindow(raw) },
+      // pure metadata is refreshed.
+      update: { contextWindow: detectContextWindow(raw), ...detectPricing(raw) },
     });
 
     if (existing) updated += 1;
@@ -269,6 +292,35 @@ export async function resolveApiModel(
     inputPricePerM: row.inputPricePerM ? Number(row.inputPricePerM) : null,
     outputPricePerM: row.outputPricePerM ? Number(row.outputPricePerM) : null,
   };
+}
+
+/**
+ * Which provider model a run uses when nothing else picks one.
+ *
+ * The settings choice wins, but it can point at a row that was deleted, or be
+ * unset because the user never opened the picker. Falling back to the first
+ * model in the catalog keeps a run working — and because this is the single
+ * source both the selectors and the executors read, the model the UI shows is
+ * always the model the run gets. Empty only when no models exist at all.
+ */
+export async function resolveDefaultProviderModelId(
+  configured: string | null,
+): Promise<string> {
+  if (configured) {
+    const row = await db.apiProviderModel.findFirst({
+      where: { id: configured, provider: { enabled: true } },
+      select: { id: true },
+    });
+    if (row) return row.id;
+  }
+  // Same ordering as listProviderModelGroups, so "the fallback" and "the first
+  // option in the dropdown" are the same row.
+  const first = await db.apiProviderModel.findFirst({
+    where: { provider: { enabled: true } },
+    orderBy: [{ provider: { name: "asc" } }, { label: "asc" }],
+    select: { id: true },
+  });
+  return first?.id ?? "";
 }
 
 /** Model rows for the run-config selectors, grouped by provider. */

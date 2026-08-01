@@ -1,7 +1,10 @@
 import "server-only";
 import { db } from "@/lib/db-client";
-import { MODEL_GROUPS, type ModelOption } from "@/lib/models";
-import { listProviderModelGroups } from "@/lib/provider-catalog";
+import { MODEL_GROUPS, DEFAULT_MODELS, type ModelOption } from "@/lib/models";
+import {
+  listProviderModelGroups,
+  resolveDefaultProviderModelId,
+} from "@/lib/provider-catalog";
 import type { EngineMode } from "@/generated/prisma/enums";
 
 /**
@@ -38,18 +41,14 @@ export async function getModelCatalog(): Promise<ModelCatalog> {
   const groups =
     engineMode === "PROVIDER" ? await listProviderModelGroups() : MODEL_GROUPS;
 
-  // In PROVIDER mode the configured default can point at a deleted row, so fall
-  // back to the first model that actually exists rather than showing nothing.
-  const firstOption = groups[0]?.options[0]?.value ?? "";
-  const configuredDefault =
+  // PROVIDER mode shares its fallback with the executors, so the model shown in
+  // a picker is always the model a run would actually use.
+  const defaultModel =
     engineMode === "PROVIDER"
-      ? (setting?.defaultProviderModelId ?? "")
-      : (setting?.defaultModel ?? "");
-  const defaultModel = groups.some((g) =>
-    g.options.some((o) => o.value === configuredDefault),
-  )
-    ? configuredDefault
-    : firstOption;
+      ? await resolveDefaultProviderModelId(
+          setting?.defaultProviderModelId ?? null,
+        )
+      : (setting?.defaultModel ?? DEFAULT_MODELS.CLAUDE);
 
   const labels: Record<string, string> = {};
   // Both sides go into the label map regardless of mode: a task can still be
