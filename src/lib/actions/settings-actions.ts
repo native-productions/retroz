@@ -17,10 +17,12 @@ export async function updateSettings(input: unknown) {
   await db.appSetting.update({
     where: { id: "singleton" },
     data: {
+      engineMode: data.engineMode,
       defaultModel: data.defaultModel,
       claudeAuthMode: data.claudeAuthMode,
       codexModel: data.codexModel,
       codexReasoningEffort: data.codexReasoningEffort,
+      defaultProviderModelId: data.defaultProviderModelId,
       pexelsApiKey: data.pexelsApiKey,
       tavilyApiKey: data.tavilyApiKey,
     },

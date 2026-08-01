@@ -67,8 +67,19 @@ src/
                         builds the prompt, dispatches to a backend, owns all
                         TaskRun bookkeeping
     agent-backend.ts    backend contract (inputs, events, uniform result)
+    engine-dispatch.ts  resolves settings + overrides into one engine and starts
+                        it — the single branch point all three executors share
     claude-backend.ts   Claude Agent SDK backend (query(), in-process MCP)
     codex-backend.ts    Codex CLI backend (codex-sdk thread, HTTP MCP)
+    api-backend.ts      user-configured endpoints (AI SDK) — our own agent loop;
+                        OpenAI-compatible family + Gemini's native API
+    base-tools.ts       Read/Write/Glob/Grep/Bash/TodoWrite/view_image, which
+                        only api-backend needs (the SDKs ship their own)
+    agent-transcript.ts stored conversation for api-backend resume
+    provider-catalog.ts model discovery + resolving a model row into a run
+    provider-capabilities.ts  per-endpoint quirk flags
+    secret-box.ts       AES-256-GCM for provider API keys at rest
+    model-catalog.ts    the model choices the active engine mode offers
     run-tools.ts        shared retroz tool defs (render/list/search) + per-run
                         token registry for the HTTP MCP route
     caption-tools.ts    save_caption — the Work-only tool that writes the post
@@ -165,6 +176,21 @@ data/                   assets + task outputs + fonts (gitignored)
 - `RenderSource` is a **separate table on purpose**: `artifacts` is read with no
   `select` in the run viewer, gallery, and Work session queries, so an HTML column
   on `RunArtifact` would drag whole documents through every thumbnail render.
+- **"OpenAI-compatible" is a family, not one protocol.** Endpoints disagree on
+  parallel tool calls, strict schemas, and the instruction role name — hence the
+  per-provider flags in `provider-capabilities.ts`, applied through the SDK's
+  `transformRequestBody`.
+- **Gemini must use `ApiProtocol.GOOGLE`, never OPENAI.** Its OpenAI-compatible
+  endpoint cannot run agent tools: 3.x models reject the second turn with
+  "Function call is missing a thought_signature", a Gemini-only field the OpenAI
+  protocol has nowhere to carry, and every pre-3.x model is retired. The native
+  path (`@ai-sdk/google`) carries the signature itself. Its `/models` listing
+  also returns `models/<slug>` while the API wants `<slug>`, and it lists every
+  modality it serves — `provider-catalog.ts` strips the prefix and keeps only
+  `generateContent` chat models.
+- A run in PROVIDER mode stores the **ApiProviderModel row id** in
+  `TaskRun.model`, not a slug. Render it with `modelLabel(value, labels)` using
+  the map from `getModelCatalog()`, or it shows as a raw cuid.
 
 ## Verify a change
 

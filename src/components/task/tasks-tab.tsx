@@ -1,8 +1,10 @@
 import { db } from "@/lib/db-client";
 import { modelLabel } from "@/lib/models";
+import { getModelCatalog } from "@/lib/model-catalog";
 import { TasksBrowser } from "@/components/task/tasks-browser";
 
 export async function TasksTab({ workflowId }: { workflowId: string }) {
+  const { labels } = await getModelCatalog();
   const [tasks, folders, campaigns] = await Promise.all([
     db.task.findMany({
       // Work sessions run on hidden tasks — they belong to the Work page, not
@@ -42,7 +44,7 @@ export async function TasksTab({ workflowId }: { workflowId: string }) {
         id: t.id,
         name: t.name,
         folderName: t.assetFolder?.name ?? null,
-        model: modelLabel(t.model),
+        model: modelLabel(t.model, labels),
         runs: t._count.runs,
         campaignId: t.campaignItem?.campaignId ?? null,
         campaignName: t.campaignItem?.campaign.name ?? null,

@@ -11,6 +11,7 @@ import {
   planFromEvents,
   timeLabel,
 } from "@/lib/work-events";
+import { useSelectedModel } from "@/components/model-catalog-provider";
 import { mediaUrl } from "@/lib/media";
 import { deleteAsset } from "@/lib/actions/asset-actions";
 import { stopRun } from "@/lib/actions/task-actions";
@@ -92,7 +93,11 @@ export function WorkSessionView({
   const [pending, setPending] = React.useState<WorkMessage[]>([]);
   const [uploads, setUploads] = React.useState<WorkAttachment[]>([]);
   const [uploading, setUploading] = React.useState(false);
-  const [model, setModel] = React.useState(detail?.model ?? "opus");
+  // What the session has stored, which may be null (never chosen) or a model
+  // from the inactive engine mode. `useSelectedModel` turns either into the
+  // value the picker should actually show.
+  const [model, setModel] = React.useState<string | null>(detail?.model ?? null);
+  const selectedModel = useSelectedModel(model);
   const [aspectRatio, setAspectRatio] = React.useState<string | null>(
     detail?.aspectRatio ?? null,
   );
@@ -322,7 +327,7 @@ export function WorkSessionView({
         hasProjects={hasProjects}
         messages={messages}
         skillSlugs={detail?.skillSlugs ?? []}
-        model={model}
+        model={selectedModel}
         onModelChange={changeModel}
         attachments={attachments}
         uploading={uploading}

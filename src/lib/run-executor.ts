@@ -2,7 +2,8 @@ import path from "node:path";
 import { db } from "@/lib/db-client";
 import { DATA_ROOT, toRelative, runFolderSlug } from "@/lib/paths";
 import { openRunWorkspace } from "@/lib/run-workspace";
-import { resolveProviderModel } from "@/lib/models";
+import { selectEngine, dispatchAgentRun } from "@/lib/engine-dispatch";
+import { imageToolName } from "@/lib/models";
 import { buildFontFaceCss } from "@/lib/font-css";
 import { buildRunPrompt } from "@/lib/prompt-builder";
 import { rankAssets } from "@/lib/asset-ranker";
@@ -20,8 +21,6 @@ import {
   registerRunController,
   releaseRunController,
 } from "@/lib/run-control";
-import { runClaudeAgent } from "@/lib/claude-backend";
-import { runCodexAgent } from "@/lib/codex-backend";
 import type { RunEventType } from "@/generated/prisma/enums";
 
 // Max source photos injected into the run prompt. Larger folders are ranked and
@@ -52,14 +51,45 @@ export async function executeRun(taskRunId: string): Promise<void> {
     create: { id: "singleton" },
   });
 
-  // Engine is model-driven (no global provider toggle). A campaign task pins its
-  // provider; otherwise the first chosen model decides, falling back to Claude.
-  const { provider, model } = resolveProviderModel({
+  // In LOCAL mode the engine is model-driven (a Codex model runs on Codex); in
+  // PROVIDER mode every run goes to the configured API endpoint. A campaign task
+  // pins its provider, which only applies to the local engines.
+  const selection = await selectEngine({
+    settings,
     pinnedProvider: task.provider,
     candidates: [run.model, task.model, task.workflow.defaultModel],
-    claudeDefault: settings.defaultModel,
-    codexDefault: settings.codexModel,
   });
+  const { provider, model } = selection;
+
+  // A misconfigured engine is a user-fixable problem, not a crash. Fail here,
+  // before any workspace is staged, with a message the run viewer can show.
+  if (selection.error) {
+    await db.taskRun.update({
+      where: { id: taskRunId },
+      data: {
+        status: "FAILED",
+        startedAt: new Date(),
+        finishedAt: new Date(),
+        provider,
+        error: selection.error,
+      },
+    });
+    await db.runEvent.create({
+      data: {
+        taskRunId,
+        seq: 0,
+        type: "ERROR",
+        payload: { message: selection.error },
+      },
+    });
+    emitRunEvent(taskRunId, {
+      seq: 0,
+      type: "ERROR",
+      payload: { message: selection.error },
+      ts: new Date().toISOString(),
+    });
+    return;
+  }
 
   // Web research. Null hides the tools completely — they never reach allowedTools
   // or the MCP tools/list, so the agent cannot burn a turn on a call that fails.
@@ -215,8 +245,16 @@ export async function executeRun(taskRunId: string): Promise<void> {
   });
   await record("STATUS", { status: "RUNNING" });
 
+  // Only the OpenAI-compatible engine can end up without one: a text-only
+  // provider model never gets view_image registered.
+  const imageTool = imageToolName(
+    provider,
+    selection.apiModel?.supportsVision ?? true,
+  );
+
   const prompt = buildRunPrompt({
     provider,
+    imageTool,
     workflowName: task.workflow.name,
     platform: task.workflow.platform,
     globalInstruction: task.workflow.globalInstruction,
@@ -237,6 +275,7 @@ export async function executeRun(taskRunId: string): Promise<void> {
   const toolContext: RunToolContext = {
     taskRunId,
     provider,
+    imageTool,
     outDirAbs,
     outPrefix: outputRelPath,
     // Browsing is a Work-session capability; scheduled task runs stay on the
@@ -293,18 +332,14 @@ export async function executeRun(taskRunId: string): Promise<void> {
     provider === "CODEX" ? registerToolContext(toolContext, tools) : null;
 
   try {
-    const result =
-      provider === "CODEX"
-        ? await runCodexAgent({
-            ...shared,
-            reasoningEffort: settings.codexReasoningEffort,
-            mcpServerUrl: `http://127.0.0.1:${process.env.PORT ?? "3020"}/api/mcp/${mcpToken}`,
-          })
-        : await runClaudeAgent({
-            ...shared,
-            skills: skillsOption,
-            stripApiKey: settings.claudeAuthMode === "SUBSCRIPTION",
-          });
+    const result = await dispatchAgentRun({
+      selection,
+      shared,
+      codexReasoningEffort: settings.codexReasoningEffort,
+      claudeAuthMode: settings.claudeAuthMode,
+      skills: skillsOption,
+      mcpToken,
+    });
 
     // A user stop wins over whatever the backend reports.
     const finalStatus = abortController.signal.aborted

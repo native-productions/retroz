@@ -2,7 +2,7 @@ import path from "node:path";
 import { db } from "@/lib/db-client";
 import { DATA_ROOT, toRelative } from "@/lib/paths";
 import { openRunWorkspace } from "@/lib/run-workspace";
-import { resolveProviderModel } from "@/lib/models";
+import { selectEngine, dispatchAgentRun } from "@/lib/engine-dispatch";
 import { emitRunEvent, type RunBusEvent } from "@/lib/run-bus";
 import {
   registerToolContext,
@@ -13,8 +13,6 @@ import { PLANNER_TOOLS, type PlannerToolContext } from "@/lib/planner-tools";
 import { RESEARCH_TOOLS } from "@/lib/research-tools";
 import { isTavilyConfigured } from "@/lib/tavily";
 import { buildPlannerPrompt } from "@/lib/planner-prompt";
-import { runClaudeAgent } from "@/lib/claude-backend";
-import { runCodexAgent } from "@/lib/codex-backend";
 import type { RunEventType } from "@/generated/prisma/enums";
 
 /**
@@ -48,12 +46,25 @@ export async function executePlannerRun(planRunId: string): Promise<void> {
     create: { id: "singleton" },
   });
 
-  const { provider, model } = resolveProviderModel({
+  const selection = await selectEngine({
+    settings,
     pinnedProvider: campaign.provider,
     candidates: [planRun.model, campaign.model, campaign.workflow.defaultModel],
-    claudeDefault: settings.defaultModel,
-    codexDefault: settings.codexModel,
   });
+  const { provider, model } = selection;
+
+  if (selection.error) {
+    await db.campaignPlanRun.update({
+      where: { id: planRunId },
+      data: {
+        status: "FAILED",
+        finishedAt: new Date(),
+        provider,
+        error: selection.error,
+      },
+    });
+    return;
+  }
 
   // Web research. Null hides the tools completely — they never reach allowedTools
   // or the MCP tools/list, so the planner cannot burn a turn on a call that fails.
@@ -163,19 +174,15 @@ export async function executePlannerRun(planRunId: string): Promise<void> {
     provider === "CODEX" ? registerToolContext(toolContext, tools) : null;
 
   try {
-    const result =
-      provider === "CODEX"
-        ? await runCodexAgent({
-            ...shared,
-            reasoningEffort: settings.codexReasoningEffort,
-            mcpServerUrl: `http://127.0.0.1:${process.env.PORT ?? "3020"}/api/mcp/${mcpToken}`,
-          })
-        : await runClaudeAgent({
-            ...shared,
-            skills: "all",
-            baseTools: ["Read"],
-            stripApiKey: settings.claudeAuthMode === "SUBSCRIPTION",
-          });
+    const result = await dispatchAgentRun({
+      // Research arrives as MCP tools, so the planner's built-ins stay read-only.
+      selection,
+      shared: { ...shared, baseTools: ["Read"] },
+      codexReasoningEffort: settings.codexReasoningEffort,
+      claudeAuthMode: settings.claudeAuthMode,
+      skills: "all",
+      mcpToken,
+    });
 
     await db.campaignPlanRun.update({
       where: { id: planRunId },

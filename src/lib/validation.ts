@@ -215,12 +215,55 @@ export const skillUpsertSchema = z.object({
 });
 
 export const settingsUpdateSchema = z.object({
+  engineMode: z.enum(["LOCAL", "PROVIDER"]),
   defaultModel: z.string().min(1),
   claudeAuthMode: z.enum(["SUBSCRIPTION", "API_KEY"]),
   codexModel: z.string().min(1),
   codexReasoningEffort: z.enum(["low", "medium", "high", "xhigh"]),
+  // ApiProviderModel id, or null when no provider model has been chosen yet.
+  defaultProviderModelId: z.string().nullable().default(null),
   pexelsApiKey: z.string().trim().max(200).default(""),
   tavilyApiKey: z.string().trim().max(200).default(""),
+});
+
+// --- OpenAI-compatible providers -------------------------------------------
+
+export const providerUpsertSchema = z.object({
+  id: z.string().optional(),
+  name: z.string().min(1, "Name is required").max(60),
+  protocol: z.enum(["OPENAI", "GOOGLE"]).default("OPENAI"),
+  baseUrl: z
+    .string()
+    .trim()
+    .min(1, "Base URL is required")
+    .max(300)
+    .refine(
+      (v) => /^https?:\/\//.test(v),
+      "Base URL must start with http:// or https://",
+    ),
+  // Omitted on edit means "keep the stored key" — the client never receives it
+  // back, so it cannot echo it in.
+  apiKey: z.string().trim().max(400).optional(),
+  enabled: z.boolean().default(true),
+  capabilities: z.record(z.string(), z.unknown()).optional(),
+});
+
+export const providerModelCreateSchema = z.object({
+  providerId: z.string().min(1),
+  modelId: z.string().trim().min(1).max(200),
+  label: z.string().trim().max(120).optional(),
+  supportsVision: z.boolean().default(false),
+  contextWindow: z.number().int().positive().nullable().default(null),
+  inputPricePerM: z.number().nonnegative().nullable().default(null),
+  outputPricePerM: z.number().nonnegative().nullable().default(null),
+});
+
+export const providerModelUpdateSchema = z.object({
+  id: z.string().min(1),
+  label: z.string().trim().max(120).optional(),
+  supportsVision: z.boolean().optional(),
+  inputPricePerM: z.number().nonnegative().nullable().optional(),
+  outputPricePerM: z.number().nonnegative().nullable().optional(),
 });
 
 const fontCategoryEnum = z.enum([

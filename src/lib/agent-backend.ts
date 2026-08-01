@@ -1,5 +1,6 @@
-import type { RunEventType } from "@/generated/prisma/enums";
+import type { ApiProtocol, RunEventType } from "@/generated/prisma/enums";
 import type { ToolDef } from "@/lib/run-tools";
+import type { ProviderCapabilities } from "@/lib/provider-capabilities";
 
 // Contract between the run executor and the engine backends. Backends stream
 // TEXT/TOOL events through `record` while running and return one uniform
@@ -41,6 +42,31 @@ export interface CodexRunInput extends AgentRunInput {
   reasoningEffort: string;
   /** HTTP MCP endpoint exposing this run's retroz tools. */
   mcpServerUrl: string;
+}
+
+export interface OpenAICompatRunInput extends AgentRunInput {
+  /** Display name of the configured provider, for the SDK's provider id. */
+  providerName: string;
+  /** Wire protocol: the OpenAI-compatible family, or Gemini's native API. */
+  protocol: ApiProtocol;
+  baseUrl: string;
+  apiKey: string;
+  /** Per-endpoint quirk flags — see lib/provider-capabilities.ts. */
+  capabilities: ProviderCapabilities;
+  /**
+   * Gates the view_image tool. Unlike the other two backends, this one must be
+   * told: a text-only model offered an image tool burns a turn on a call whose
+   * result it cannot read.
+   */
+  supportsVision: boolean;
+  /** USD per million tokens, when the model row carries rates. */
+  inputPricePerM: number | null;
+  outputPricePerM: number | null;
+  /**
+   * Required here, unlike the SDK backends: with no built-ins of its own this
+   * backend has to be told which of lib/base-tools.ts to register.
+   */
+  baseTools: string[];
 }
 
 export interface AgentRunResult {

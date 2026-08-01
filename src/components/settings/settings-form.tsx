@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import { Save, Check, LoaderCircle } from "lucide-react";
 import { Button } from "@/components/ui/ui-button";
 import { Input } from "@/components/ui/ui-input";
@@ -25,6 +26,9 @@ import {
   type CodexReasoningEffort,
 } from "@/lib/models";
 import { updateSettings } from "@/lib/actions/settings-actions";
+import { ProvidersCard } from "@/components/settings/providers-card";
+import type { ProviderView } from "@/lib/actions/provider-actions";
+import { cn } from "@/lib/cn";
 
 const EFFORT_LABELS: Record<CodexReasoningEffort, string> = {
   low: "Low — fastest",
@@ -33,27 +37,68 @@ const EFFORT_LABELS: Record<CodexReasoningEffort, string> = {
   xhigh: "Extra high — hardest layouts",
 };
 
+/** One half of the Local / Provider switch. */
+function ModeChoice({
+  active,
+  title,
+  hint,
+  onSelect,
+}: {
+  active: boolean;
+  title: string;
+  hint: string;
+  onSelect: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      aria-pressed={active}
+      className={cn(
+        "flex flex-col gap-1 border-2 border-border p-3 text-left transition-colors",
+        active ? "bg-primary text-primary-fg" : "bg-surface hover:bg-surface-2",
+      )}
+    >
+      <span className="font-display font-semibold">{title}</span>
+      <span
+        className={cn("text-xs", active ? "opacity-80" : "text-fg-muted")}
+      >
+        {hint}
+      </span>
+    </button>
+  );
+}
+
 export function SettingsForm({
   initial,
+  providers,
   apiKeyPresent,
   codexAuthPresent,
 }: {
   initial: {
+    engineMode: "LOCAL" | "PROVIDER";
     defaultModel: string;
     claudeAuthMode: "SUBSCRIPTION" | "API_KEY";
     codexModel: string;
     codexReasoningEffort: string;
+    defaultProviderModelId: string | null;
     pexelsApiKey: string;
     tavilyApiKey: string;
   };
+  providers: ProviderView[];
   apiKeyPresent: boolean;
   codexAuthPresent: boolean;
 }) {
+  const router = useRouter();
+  const [engineMode, setEngineMode] = React.useState(initial.engineMode);
   const [defaultModel, setDefaultModel] = React.useState(initial.defaultModel);
   const [authMode, setAuthMode] = React.useState(initial.claudeAuthMode);
   const [codexModel, setCodexModel] = React.useState(initial.codexModel);
   const [codexEffort, setCodexEffort] = React.useState(
     initial.codexReasoningEffort,
+  );
+  const [providerModelId, setProviderModelId] = React.useState(
+    initial.defaultProviderModelId,
   );
   const [pexelsApiKey, setPexelsApiKey] = React.useState(initial.pexelsApiKey);
   const [tavilyApiKey, setTavilyApiKey] = React.useState(initial.tavilyApiKey);
@@ -62,25 +107,66 @@ export function SettingsForm({
   async function save() {
     setState("saving");
     await updateSettings({
+      engineMode,
       defaultModel,
       claudeAuthMode: authMode,
       codexModel,
       codexReasoningEffort: codexEffort,
+      defaultProviderModelId: providerModelId,
       pexelsApiKey: pexelsApiKey.trim(),
       tavilyApiKey: tavilyApiKey.trim(),
     });
     setState("saved");
+    // Every model selector in the app reads the catalog loaded by the shell, so
+    // a mode change has to invalidate it, not just this page.
+    router.refresh();
     setTimeout(() => setState("idle"), 1500);
   }
 
   return (
     <div className="flex max-w-2xl flex-col gap-5">
-      <p className="text-sm text-fg-muted">
-        Both engines stay configured. The engine for a run follows the model you
-        pick on its workflow, task, or campaign — a Claude model runs on Claude
-        Code, a Codex model on Codex. Claude is the default when nothing sets one.
-      </p>
+      {/* Engine mode — the two sides are exclusive */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Engine</CardTitle>
+          <CardDescription>
+            Where runs execute. The two are exclusive: only the active side&apos;s
+            models are offered anywhere in the app.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          <div className="grid grid-cols-2 gap-3">
+            <ModeChoice
+              active={engineMode === "LOCAL"}
+              title="Local"
+              hint="Claude Code or Codex, installed and logged in on this machine."
+              onSelect={() => setEngineMode("LOCAL")}
+            />
+            <ModeChoice
+              active={engineMode === "PROVIDER"}
+              title="Provider"
+              hint="Gemini, or any OpenAI-compatible endpoint, on your own API key."
+              onSelect={() => setEngineMode("PROVIDER")}
+            />
+          </div>
+          <p className="text-xs text-fg-muted">
+            {engineMode === "LOCAL"
+              ? "The engine for a run follows the model picked on its workflow, task, or campaign — a Claude model runs on Claude Code, a Codex model on Codex."
+              : "Every run goes to the provider model picked on its workflow, task, or campaign, falling back to the default below. Project skills are Claude-only and are not available in this mode."}
+          </p>
+        </CardContent>
+      </Card>
 
+      {engineMode === "PROVIDER" ? (
+        <ProvidersCard
+          providers={providers}
+          defaultModelId={providerModelId}
+          onDefaultModelChange={setProviderModelId}
+        />
+      ) : null}
+
+      {engineMode === "LOCAL" ? (
+        <>
       {/* Claude Code */}
       <Card>
         <CardHeader>
@@ -184,6 +270,8 @@ export function SettingsForm({
           </Field>
         </CardContent>
       </Card>
+        </>
+      ) : null}
 
       {/* Pexels */}
       <Card>
