@@ -1,5 +1,10 @@
 import { z } from "zod";
 import { ASPECT_RATIOS } from "@/lib/aspect-ratios";
+import {
+  SKILL_CONTENT_MAX,
+  SKILL_DESCRIPTION_MAX,
+  SKILL_NAME_MAX,
+} from "@/lib/skill-limits";
 
 const ASPECT_RATIO_IDS = ASPECT_RATIOS.map((r) => r.id) as [string, ...string[]];
 
@@ -208,9 +213,24 @@ export const workBundleReorderSchema = z.object({
 
 export const skillUpsertSchema = z.object({
   id: z.string().optional(),
-  name: z.string().min(1).max(80),
-  description: z.string().max(300).optional(),
-  content: z.string().max(20000).optional(),
+  name: z
+    .string()
+    .min(1, "Name the skill")
+    .max(SKILL_NAME_MAX, `Keep the name to ${SKILL_NAME_MAX} characters.`),
+  description: z
+    .string()
+    .max(
+      SKILL_DESCRIPTION_MAX,
+      `The description goes on one line of frontmatter — keep it to ${SKILL_DESCRIPTION_MAX} characters.`,
+    )
+    .optional(),
+  content: z
+    .string()
+    .max(
+      SKILL_CONTENT_MAX,
+      `That body is too long — keep it to ${SKILL_CONTENT_MAX.toLocaleString("en-US")} characters.`,
+    )
+    .optional(),
   enabled: z.boolean().default(true),
 });
 
