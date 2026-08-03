@@ -27,10 +27,21 @@ model User {
 // App settings (singleton row, id = "singleton")
 // ---------------------------------------------------------------------------
 
-// Which local coding agent executes runs.
+// Which agent engine executes runs. CLAUDE and CODEX drive a locally installed
+// CLI; OPENAI_COMPAT talks to a user-configured endpoint over the OpenAI Chat
+// Completions protocol. Recorded on every run, so history stays readable after
+// the app is switched between engine modes.
 enum AgentProvider {
   CLAUDE
   CODEX
+  OPENAI_COMPAT
+}
+
+// Which family of engines the app is configured to use. LOCAL and PROVIDER are
+// mutually exclusive in the UI: picking one hides the other's models everywhere.
+enum EngineMode {
+  LOCAL
+  PROVIDER
 }
 
 enum ClaudeAuthMode {
@@ -55,15 +66,105 @@ model AppSetting {
   // Codex engine defaults (used when provider = CODEX).
   codexModel           String @default("gpt-5.4")
   codexReasoningEffort String @default("medium")
+  // LOCAL runs on the installed Claude Code / Codex CLIs; PROVIDER runs on a
+  // configured OpenAI-compatible endpoint. Never both — the settings page makes
+  // them exclusive and resolveProviderModel ignores the inactive side's models.
+  engineMode     EngineMode     @default(LOCAL)
+  // ApiProviderModel.id used when nothing else picks a model in PROVIDER mode.
+  defaultProviderModelId String?
   // Pexels stock-photo integration. Empty = feature disabled (the Pexels tab in
   // the asset picker stays locked until a key is saved here).
   pexelsApiKey   String         @default("")
   // Tavily web-research integration. Empty = feature disabled (the web tools are
   // never registered, so no agent sees them).
   tavilyApiKey   String         @default("")
+  // IANA zone every scheduled surface renders in — the Calendar, bundle publish
+  // dates, and the labels beside cron schedules and campaign slots.
+  timezone       String         @default("Asia/Jakarta")
   assetsRoot     String         @default("data/assets")
   tasksRoot      String         @default("data/tasks")
   updatedAt      DateTime       @updatedAt
+}
+
+// ---------------------------------------------------------------------------
+// OpenAI-compatible providers (engineMode = PROVIDER)
+// ---------------------------------------------------------------------------
+
+// Where a model id was learned from: the endpoint's own /models listing, or
+// typed in by hand for endpoints that do not expose one.
+enum ModelSource {
+  FETCHED
+  MANUAL
+}
+
+// Which wire protocol an endpoint speaks.
+//
+// OPENAI covers the compatible family (OpenRouter, vendor-compatible URLs, a
+// local server). GOOGLE is Gemini's native API: its OpenAI-compatible endpoint
+// cannot run agent tools, because 3.x models require a `thought_signature` to
+// be echoed back on every function call and that field has no place in the
+// OpenAI protocol. The native provider handles it.
+enum ApiProtocol {
+  OPENAI
+  GOOGLE
+}
+
+// One user-configured endpoint speaking the OpenAI Chat Completions protocol.
+model ApiProvider {
+  id       String      @id @default(cuid())
+  name     String
+  protocol ApiProtocol @default(OPENAI)
+  // Root the SDK appends its paths to — /chat/completions and /models on
+  // OPENAI (e.g. https://openrouter.ai/api/v1), the model path on GOOGLE
+  // (e.g. https://generativelanguage.googleapis.com/v1beta).
+  baseUrl String
+  // AES-256-GCM ciphertext — never leaves the server. See lib/secret-box.ts.
+  apiKeyEnc String @default("")
+  enabled   Boolean @default(true)
+  // Per-endpoint quirk flags. "OpenAI-compatible" is not one protocol in
+  // practice: vendors differ on parallel tool calls, strict JSON schemas, the
+  // system/developer role name, and the max-tokens parameter. See
+  // lib/provider-capabilities.ts for the shape and defaults.
+  capabilities Json @default("{}")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  models ApiProviderModel[]
+
+  @@unique([name])
+}
+
+model ApiProviderModel {
+  id         String      @id @default(cuid())
+  providerId String
+  provider   ApiProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+
+  // The slug sent to the endpoint, e.g. "anthropic/claude-sonnet-4.5".
+  modelId String
+  label   String
+  // Vision gates the view_image tool: without it the agent cannot inspect the
+  // source photos it is compositing over, so the prompt drops that step.
+  supportsVision Boolean @default(false)
+  contextWindow  Int?
+  // USD per million tokens. Optional — most compat endpoints report no cost, so
+  // TaskRun.costUsd stays 0 unless these are filled in.
+  inputPricePerM  Decimal? @db.Decimal(12, 4)
+  outputPricePerM Decimal? @db.Decimal(12, 4)
+  source          ModelSource @default(FETCHED)
+  createdAt       DateTime    @default(now())
+
+  @@unique([providerId, modelId])
+  @@index([providerId])
+}
+
+// Conversation state for the OPENAI_COMPAT engine. Claude and Codex keep their
+// own transcripts behind a session/thread id; a raw API keeps nothing, so a
+// resumable Work session needs the messages stored here. Keyed by the session
+// id this app mints and hands back through onSessionId.
+model AgentTranscript {
+  id        String   @id
+  messages  Json
+  updatedAt DateTime @updatedAt
 }
 
 // ---------------------------------------------------------------------------
@@ -639,14 +740,19 @@ model WorkBundle {
   projectId String
   project   WorkProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
-  name      String
-  note      String   @default("")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  name String
+  note String @default("")
+  // Instant the bundle is meant to be posted, resolved from a wall-clock date +
+  // time in AppSetting.timezone. Null = unscheduled. Read by the Calendar, and
+  // the column a future auto-publisher would tick on.
+  publishAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
   items WorkBundleItem[]
 
   @@index([projectId])
+  @@index([publishAt])
 }
 
 model WorkBundleItem {

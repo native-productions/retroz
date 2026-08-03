@@ -73,7 +73,7 @@ export async function deleteWorkProject(id: string) {
   // with them, then let the cascade clear the sessions.
   const sessions = await db.workSession.findMany({
     where: { projectId: id },
-    select: { taskId: true, assetFolderId: true },
+    select: { taskId: true, assetFolderId: true, engineSessionId: true },
   });
   await purgeSessionSideEffects(sessions);
 
@@ -154,12 +154,27 @@ export async function deleteWorkSession(id: string) {
  * the folder of images pasted into the conversation.
  */
 async function purgeSessionSideEffects(
-  sessions: { taskId: string; assetFolderId: string | null }[],
+  sessions: {
+    taskId: string;
+    assetFolderId: string | null;
+    engineSessionId?: string | null;
+  }[],
 ): Promise<void> {
   if (sessions.length === 0) return;
   const taskIds = sessions.map((s) => s.taskId);
 
   await removeTaskOutputs(taskIds);
+
+  // The OpenAI-compatible engine stores its conversation in our own table
+  // rather than inside a CLI, so nothing else would ever clean it up.
+  const engineSessionIds = sessions
+    .map((s) => s.engineSessionId)
+    .filter((id): id is string => Boolean(id));
+  if (engineSessionIds.length > 0) {
+    await db.agentTranscript.deleteMany({
+      where: { id: { in: engineSessionIds } },
+    });
+  }
 
   const folderIds = sessions
     .map((s) => s.assetFolderId)
@@ -419,7 +434,7 @@ async function listProjectRenders(
     byPath.set(row.relPath, {
       id: row.id,
       name: row.filename,
-      url: mediaUrl(row.relPath),
+      url: mediaUrl(row.relPath, row.id),
       relPath: row.relPath,
       origin: "render",
       sourceLabel: from?.title ?? "",

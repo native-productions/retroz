@@ -53,7 +53,9 @@ export function useWorkStream(runId: string | null) {
             id: a.id ?? a.relPath,
             filename: a.filename,
             relPath: a.relPath,
-            url: mediaUrl(a.relPath),
+            // A revision overwrites the path it renders, so the artifact id
+            // rides along as a cache-buster — same URL, stale image otherwise.
+            url: mediaUrl(a.relPath, a.id ?? null),
             sizeLabel: a.width && a.height ? `${a.width} × ${a.height}` : "",
           },
         ]);

@@ -2,7 +2,8 @@ import path from "node:path";
 import { db } from "@/lib/db-client";
 import { DATA_ROOT, slugify, toRelative } from "@/lib/paths";
 import { openRunWorkspace } from "@/lib/run-workspace";
-import { resolveProviderModel } from "@/lib/models";
+import { selectEngine, dispatchAgentRun } from "@/lib/engine-dispatch";
+import { imageToolName } from "@/lib/models";
 import { buildFontFaceCss } from "@/lib/font-css";
 import { buildWorkPrompt, buildWorkTurnPrompt } from "@/lib/work-prompt";
 import { aspectRatioRule } from "@/lib/aspect-ratios";
@@ -26,8 +27,6 @@ import {
   registerRunController,
   releaseRunController,
 } from "@/lib/run-control";
-import { runClaudeAgent } from "@/lib/claude-backend";
-import { runCodexAgent } from "@/lib/codex-backend";
 import type { AgentRunResult } from "@/lib/agent-backend";
 import type { RunEventType } from "@/generated/prisma/enums";
 
@@ -76,7 +75,8 @@ export async function executeWorkTurn(taskRunId: string): Promise<void> {
     create: { id: "singleton" },
   });
 
-  const { provider, model } = resolveProviderModel({
+  const selection = await selectEngine({
+    settings,
     pinnedProvider: project.provider,
     candidates: [
       run.model,
@@ -84,9 +84,22 @@ export async function executeWorkTurn(taskRunId: string): Promise<void> {
       project.defaultModel,
       workflow.defaultModel,
     ],
-    claudeDefault: settings.defaultModel,
-    codexDefault: settings.codexModel,
   });
+  const { provider, model } = selection;
+
+  if (selection.error) {
+    await db.taskRun.update({
+      where: { id: taskRunId },
+      data: {
+        status: "FAILED",
+        startedAt: new Date(),
+        finishedAt: new Date(),
+        provider,
+        error: selection.error,
+      },
+    });
+    return;
+  }
 
   // The turn this run belongs to, and whether it is the first of the session.
   const message = session.messages.find((m) => m.taskRunId === taskRunId);
@@ -387,8 +400,16 @@ export async function executeWorkTurn(taskRunId: string): Promise<void> {
     ...new Map(priorArtifacts.map((a) => [a.filename, a])).values(),
   ];
 
+  // Only the OpenAI-compatible engine can end up without one: a text-only
+  // provider model never gets view_image registered.
+  const imageTool = imageToolName(
+    provider,
+    selection.apiModel?.supportsVision ?? true,
+  );
+
   const fullPrompt = buildWorkPrompt({
     provider,
+    imageTool,
     workflowName: workflow.name,
     platform: workflow.platform,
     globalInstruction: workflow.globalInstruction,
@@ -450,6 +471,7 @@ export async function executeWorkTurn(taskRunId: string): Promise<void> {
   const toolContext: RunToolContext = {
     taskRunId,
     provider,
+    imageTool,
     outDirAbs,
     outPrefix: outputRelPath,
     webDirAbs,
@@ -505,17 +527,14 @@ export async function executeWorkTurn(taskRunId: string): Promise<void> {
       onSessionId,
       resumeSessionId: resume,
     };
-    return provider === "CODEX"
-      ? runCodexAgent({
-          ...shared,
-          reasoningEffort: settings.codexReasoningEffort,
-          mcpServerUrl: `http://127.0.0.1:${process.env.PORT ?? "3020"}/api/mcp/${mcpToken}`,
-        })
-      : runClaudeAgent({
-          ...shared,
-          skills: skillsOption,
-          stripApiKey: settings.claudeAuthMode === "SUBSCRIPTION",
-        });
+    return dispatchAgentRun({
+      selection,
+      shared,
+      codexReasoningEffort: settings.codexReasoningEffort,
+      claudeAuthMode: settings.claudeAuthMode,
+      skills: skillsOption,
+      mcpToken,
+    });
   }
 
   try {

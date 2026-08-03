@@ -1,6 +1,7 @@
 import { subDays } from "date-fns";
 import { db } from "@/lib/db-client";
 import { mediaUrl } from "@/lib/media";
+import { providerLabel } from "@/lib/models";
 import type { AgentProvider } from "@/generated/prisma/enums";
 
 // Read side of the dashboard. Every panel's view model is assembled here so the
@@ -297,7 +298,7 @@ export async function getDashboardData(): Promise<DashboardData> {
       id: a.id,
       filename: a.filename,
       relPath: a.relPath,
-      url: mediaUrl(a.relPath),
+      url: mediaUrl(a.relPath, a.id),
       origin: session ? session.title : a.taskRun.task.workflow.name,
       originKind: session ? "work" : "run",
       href: session ? `/work/${session.id}` : `/runs/${a.taskRun.id}`,
@@ -341,7 +342,7 @@ export async function getDashboardData(): Promise<DashboardData> {
       const list = days.map((d) => byDay.get(d.key)!);
       return {
         provider,
-        label: provider === "CODEX" ? "Codex" : "Claude",
+        label: providerLabel(provider),
         days: list,
         totalIn: list.reduce((n, d) => n + d.tokensIn, 0),
         totalOut: list.reduce((n, d) => n + d.tokensOut, 0),

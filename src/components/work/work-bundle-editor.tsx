@@ -23,6 +23,7 @@ import { CSS } from "@dnd-kit/utilities";
 import {
   Download,
   GripVertical,
+  CalendarClock,
   Images,
   LoaderCircle,
   Trash2,
@@ -33,10 +34,13 @@ import { cn } from "@/lib/cn";
 import { Button } from "@/components/ui/ui-button";
 import { useConfirm } from "@/components/confirm-provider";
 import { Lightbox } from "@/components/run/image-lightbox";
+import { Input } from "@/components/ui/ui-input";
+import { DatePicker } from "@/components/ui/ui-date-picker";
 import {
   deleteWorkBundle,
   removeBundleItem,
   reorderBundleItems,
+  scheduleWorkBundle,
   updateWorkBundle,
 } from "@/lib/actions/work-bundle-actions";
 import {
@@ -46,6 +50,74 @@ import {
 } from "@/lib/work-types";
 
 const MOTION = "duration-200 ease-[cubic-bezier(0.23,1,0.32,1)]";
+
+/**
+ * The bundle's publish slot. It commits on change rather than behind a save
+ * button: there is one value here, and a date picker that has already closed is
+ * a decision the user considers made.
+ */
+function PublishRow({ bundle }: { bundle: WorkBundleDetail }) {
+  const router = useRouter();
+  const [date, setDate] = React.useState(bundle.publish?.date ?? "");
+  const [time, setTime] = React.useState(bundle.publish?.time ?? "09:00");
+  const [saving, setSaving] = React.useState(false);
+
+  async function commit(nextDate: string, nextTime: string) {
+    setSaving(true);
+    try {
+      await scheduleWorkBundle({
+        id: bundle.id,
+        publishDate: nextDate || null,
+        publishTime: nextTime,
+      });
+      router.refresh();
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="flex shrink-0 flex-wrap items-center gap-2 border-b-2 border-border-soft px-5 py-2">
+      <span className="inline-flex items-center gap-1.5 font-mono text-[11px] uppercase tracking-wide text-fg-muted">
+        <CalendarClock className="size-3.5" />
+        Publish
+      </span>
+      <DatePicker
+        aria-label="Publish date"
+        value={date}
+        onChange={(next) => {
+          setDate(next);
+          void commit(next, time);
+        }}
+        className="h-8 w-48 text-xs"
+      />
+      {date ? (
+        <>
+          <Input
+            type="time"
+            aria-label="Publish time"
+            value={time}
+            onChange={(e) => {
+              setTime(e.target.value);
+              void commit(date, e.target.value);
+            }}
+            className="h-8 w-28 text-xs"
+          />
+          <span className="font-mono text-[10px] text-fg-muted">
+            {bundle.timezone}
+          </span>
+        </>
+      ) : (
+        <span className="font-mono text-[11px] text-fg-muted">
+          Optional — a date puts this bundle on the Calendar.
+        </span>
+      )}
+      {saving ? (
+        <LoaderCircle className="size-3.5 animate-spin text-fg-muted" />
+      ) : null}
+    </div>
+  );
+}
 
 /**
  * One bundle, in slide order. Order is the whole value of this screen, so it is
@@ -175,6 +247,8 @@ export function WorkBundleEditor({ bundle }: { bundle: WorkBundleDetail }) {
         </Button>
       </div>
 
+      <PublishRow bundle={bundle} />
+
       {offRatio > 0 ? (
         <p className="flex shrink-0 items-center gap-2 border-b-2 border-border-soft bg-danger/10 px-5 py-2 text-xs text-danger">
           <TriangleAlert className="size-3.5 shrink-0" />
@@ -242,6 +316,7 @@ export function WorkBundleEditor({ bundle }: { bundle: WorkBundleDetail }) {
         images={items.map((i) => ({
           filename: i.render.filename,
           relPath: i.render.relPath,
+          url: i.render.url,
         }))}
         index={lightboxIndex}
         onIndexChange={setLightboxIndex}

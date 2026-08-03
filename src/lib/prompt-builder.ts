@@ -39,6 +39,8 @@ interface SkillForPrompt {
 
 export function buildRunPrompt(input: {
   provider: AgentProvider;
+  /** Image-reading tool for this engine, or null when it cannot see images. */
+  imageTool: string | null;
   workflowName: string;
   platform: string;
   globalInstruction: string;
@@ -58,6 +60,7 @@ export function buildRunPrompt(input: {
 }): string {
   const {
     provider,
+    imageTool,
     workflowName,
     platform,
     globalInstruction,
@@ -223,8 +226,13 @@ ${step(3)}. Only when an image genuinely needs one, source it in this order and 
       when nothing local fits. Import just the ones you will actually place;
       each becomes a permanent asset in this task's folder. Never invent a URL —
       pass back exactly what search_stock returned.
-${step(4)}. Inspect whatever you chose (use the ${provider === "CODEX" ? "view_image" : "Read"} tool on its path) so overlays fit
-   the actual composition.
+${step(4)}. ${
+  imageTool
+    ? `Inspect whatever you chose (use the ${imageTool} tool on its path) so overlays fit
+   the actual composition.`
+    : `You cannot view images directly, so design from the dimensions and
+   descriptions listed above and keep overlays clear of the frame edges.`
+}
 ${step(5)}. For EACH final image, build a complete self-contained HTML document. Embed
    the source photo as the background using its absolute file:// path
    (e.g. <img src="file://${assetDirAbs ?? "/path"}/photo.png">) or a data URI.

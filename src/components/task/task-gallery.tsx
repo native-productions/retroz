@@ -37,7 +37,7 @@ export function TaskGallery({ images }: { images: GalleryImage[] }) {
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src={mediaUrl(img.relPath)}
+                src={mediaUrl(img.relPath, img.id)}
                 alt={img.filename}
                 className="block h-auto w-full object-contain"
               />
@@ -47,7 +47,11 @@ export function TaskGallery({ images }: { images: GalleryImage[] }) {
       )}
 
       <Lightbox
-        images={images}
+        images={images.map((img) => ({
+          filename: img.filename,
+          relPath: img.relPath,
+          url: mediaUrl(img.relPath, img.id),
+        }))}
         index={index}
         onIndexChange={setIndex}
         onClose={() => setIndex(null)}

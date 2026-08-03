@@ -5,6 +5,7 @@ import { db } from "@/lib/db-client";
 import { PageHeader, PageBody, EmptyState } from "@/components/page-header";
 import { ActionButton } from "@/components/ui/ui-action-button";
 import { modelLabel } from "@/lib/models";
+import { getModelCatalog } from "@/lib/model-catalog";
 import { TaskRunButton } from "@/components/task/task-run-button";
 import { TaskEditor } from "@/components/task/task-editor";
 import { TaskGallery } from "@/components/task/task-gallery";
@@ -34,6 +35,9 @@ export default async function TaskPage({
     },
   });
   if (!task) notFound();
+
+  // Resolves a PROVIDER-mode model id on a past run back to its display name.
+  const { labels: modelLabels } = await getModelCatalog();
 
   // All rendered images across this task's runs, newest first.
   const galleryImages = (
@@ -91,7 +95,8 @@ export default async function TaskPage({
                         {run.outputRelPath?.split("/").pop() ?? run.id}
                       </p>
                       <p className="text-xs text-fg-muted font-mono">
-                        {run._count.artifacts} images · {modelLabel(run.model)}
+                        {run._count.artifacts} images ·{" "}
+                        {modelLabel(run.model, modelLabels)}
                       </p>
                     </div>
                     <RunStatusBadge status={run.status} />

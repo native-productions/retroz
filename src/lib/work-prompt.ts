@@ -100,6 +100,8 @@ const captionRule = `   The caption always describes the CURRENT set of images, 
 
 export interface WorkPromptInput {
   provider: AgentProvider;
+  /** Image-reading tool for this engine, or null when it cannot see images. */
+  imageTool: string | null;
   workflowName: string;
   platform: string;
   globalInstruction: string;
@@ -249,6 +251,7 @@ How to revise:
 export function buildWorkPrompt(input: WorkPromptInput): string {
   const {
     provider,
+    imageTool,
     workflowName,
     platform,
     globalInstruction,
@@ -388,8 +391,13 @@ ${step(3)}. Only when an image genuinely needs one, source it in this order and 
       specific page, the page itself is often the truest image of it.`
           : ""
       }
-${step(4)}. Inspect whatever you chose (use the ${provider === "CODEX" ? "view_image" : "Read"} tool on its path) before designing
-   over it, so the overlay fits the real composition.
+${step(4)}. ${
+  imageTool
+    ? `Inspect whatever you chose (use the ${imageTool} tool on its path) before designing
+   over it, so the overlay fits the real composition.`
+    : `You cannot view images directly, so design from the dimensions and
+   descriptions listed above and keep overlays clear of the frame edges.`
+}
 ${step(5)}. For EACH final image, build a complete self-contained HTML document. Embed the
    photo as the background via its absolute file:// path or a data URI, inline
    all CSS, and use the fonts above.

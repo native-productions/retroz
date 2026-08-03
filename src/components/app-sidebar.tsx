@@ -7,6 +7,7 @@ import { signOut } from "next-auth/react";
 import * as DropdownMenu from "@radix-ui/react-dropdown-menu";
 import { useTheme } from "@/components/theme-provider";
 import {
+  CalendarDays,
   ChevronRight,
   Folder,
   FolderOpen,
@@ -47,6 +48,7 @@ const NAV: NavEntry[] = [
   { kind: "link", href: "/", label: "Dashboard", icon: LayoutDashboard },
   { kind: "link", href: "/workflows", label: "Workflow", icon: WorkflowIcon },
   { kind: "link", href: "/work", label: "Work", icon: MessagesSquare },
+  { kind: "link", href: "/calendar", label: "Calendar", icon: CalendarDays },
   {
     kind: "folder",
     id: "master",

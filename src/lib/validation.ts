@@ -1,9 +1,41 @@
 import { z } from "zod";
 import { ASPECT_RATIOS } from "@/lib/aspect-ratios";
+import {
+  SKILL_CONTENT_MAX,
+  SKILL_DESCRIPTION_MAX,
+  SKILL_NAME_MAX,
+} from "@/lib/skill-limits";
 
 const ASPECT_RATIO_IDS = ASPECT_RATIOS.map((r) => r.id) as [string, ...string[]];
 
 const researchModeEnum = z.enum(["OFF", "AUTO", "ON"]);
+
+/** True when the runtime recognises the string as an IANA zone. */
+export function isTimeZone(value: string): boolean {
+  try {
+    new Intl.DateTimeFormat("en-GB", { timeZone: value });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * A wall-clock publish slot, kept as separate date and time strings all the way
+ * to the server: only the server knows `AppSetting.timezone`, so it is the only
+ * place that can turn them into a correct instant.
+ */
+const publishFields = {
+  publishDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD")
+    .nullable()
+    .optional(),
+  publishTime: z
+    .string()
+    .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Use HH:mm")
+    .optional(),
+};
 
 export const workflowCreateSchema = z.object({
   name: z.string().min(1, "Name is required").max(80),
@@ -188,12 +220,23 @@ export const workBundleCreateSchema = z.object({
   projectId: z.string().min(1),
   name: z.string().min(1, "Name the bundle").max(80),
   artifactIds: z.array(z.string().min(1)).min(1).max(200),
+  ...publishFields,
 });
 
 export const workBundleUpdateSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1, "Name the bundle").max(80).optional(),
   note: z.string().max(1000).optional(),
+});
+
+/**
+ * Reschedule (or unschedule) a bundle. `publishDate: null` clears the date;
+ * omitting it entirely is a no-op, so a caller that only knows the time cannot
+ * accidentally wipe the day.
+ */
+export const workBundleScheduleSchema = z.object({
+  id: z.string().min(1),
+  ...publishFields,
 });
 
 export const workBundleAddSchema = z.object({
@@ -208,19 +251,83 @@ export const workBundleReorderSchema = z.object({
 
 export const skillUpsertSchema = z.object({
   id: z.string().optional(),
-  name: z.string().min(1).max(80),
-  description: z.string().max(300).optional(),
-  content: z.string().max(20000).optional(),
+  name: z
+    .string()
+    .min(1, "Name the skill")
+    .max(SKILL_NAME_MAX, `Keep the name to ${SKILL_NAME_MAX} characters.`),
+  description: z
+    .string()
+    .max(
+      SKILL_DESCRIPTION_MAX,
+      `The description goes on one line of frontmatter — keep it to ${SKILL_DESCRIPTION_MAX} characters.`,
+    )
+    .optional(),
+  content: z
+    .string()
+    .max(
+      SKILL_CONTENT_MAX,
+      `That body is too long — keep it to ${SKILL_CONTENT_MAX.toLocaleString("en-US")} characters.`,
+    )
+    .optional(),
   enabled: z.boolean().default(true),
 });
 
 export const settingsUpdateSchema = z.object({
+  engineMode: z.enum(["LOCAL", "PROVIDER"]),
   defaultModel: z.string().min(1),
   claudeAuthMode: z.enum(["SUBSCRIPTION", "API_KEY"]),
   codexModel: z.string().min(1),
   codexReasoningEffort: z.enum(["low", "medium", "high", "xhigh"]),
+  // ApiProviderModel id, or null when no provider model has been chosen yet.
+  defaultProviderModelId: z.string().nullable().default(null),
   pexelsApiKey: z.string().trim().max(200).default(""),
   tavilyApiKey: z.string().trim().max(200).default(""),
+  timezone: z
+    .string()
+    .trim()
+    .min(1)
+    .max(64)
+    .refine(isTimeZone, "Not a timezone the system knows, e.g. Asia/Jakarta"),
+});
+
+// --- OpenAI-compatible providers -------------------------------------------
+
+export const providerUpsertSchema = z.object({
+  id: z.string().optional(),
+  name: z.string().min(1, "Name is required").max(60),
+  protocol: z.enum(["OPENAI", "GOOGLE"]).default("OPENAI"),
+  baseUrl: z
+    .string()
+    .trim()
+    .min(1, "Base URL is required")
+    .max(300)
+    .refine(
+      (v) => /^https?:\/\//.test(v),
+      "Base URL must start with http:// or https://",
+    ),
+  // Omitted on edit means "keep the stored key" — the client never receives it
+  // back, so it cannot echo it in.
+  apiKey: z.string().trim().max(400).optional(),
+  enabled: z.boolean().default(true),
+  capabilities: z.record(z.string(), z.unknown()).optional(),
+});
+
+export const providerModelCreateSchema = z.object({
+  providerId: z.string().min(1),
+  modelId: z.string().trim().min(1).max(200),
+  label: z.string().trim().max(120).optional(),
+  supportsVision: z.boolean().default(false),
+  contextWindow: z.number().int().positive().nullable().default(null),
+  inputPricePerM: z.number().nonnegative().nullable().default(null),
+  outputPricePerM: z.number().nonnegative().nullable().default(null),
+});
+
+export const providerModelUpdateSchema = z.object({
+  id: z.string().min(1),
+  label: z.string().trim().max(120).optional(),
+  supportsVision: z.boolean().optional(),
+  inputPricePerM: z.number().nonnegative().nullable().optional(),
+  outputPricePerM: z.number().nonnegative().nullable().optional(),
 });
 
 const fontCategoryEnum = z.enum([

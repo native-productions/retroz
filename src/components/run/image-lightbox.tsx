@@ -8,6 +8,11 @@ import { mediaUrl } from "@/lib/media";
 export interface LightboxImage {
   filename: string;
   relPath: string;
+  /**
+   * Prebuilt URL, when the caller has one. Renders that were revised carry a
+   * cache-busting version on their URL that `relPath` alone cannot reproduce.
+   */
+  url?: string;
 }
 
 /** Full-screen image viewer with prev/next carousel + keyboard nav. */
@@ -75,7 +80,7 @@ export function Lightbox({
             {current ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img
-                src={mediaUrl(current.relPath)}
+                src={current.url ?? mediaUrl(current.relPath)}
                 alt={current.filename}
                 className="max-h-[74vh] w-auto rounded-[4px] border-2 border-border object-contain"
               />

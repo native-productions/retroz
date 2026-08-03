@@ -1,7 +1,10 @@
 import { db } from "@/lib/db-client";
 import { mediaUrl } from "@/lib/media";
+import { getAppTimezone } from "@/lib/app-timezone";
+import { formatInTz, zonedTime, zonedYmd } from "@/lib/campaign-time";
 import { describeWhen, startOfDay } from "@/lib/work-queries";
 import type {
+  BundlePublish,
   WorkBundleDetail,
   WorkBundleSummary,
   WorkRender,
@@ -64,6 +67,19 @@ function describeDay(at: Date): { day: string; dayLabel: string } {
   };
 }
 
+/** Split a stored instant into the label and form parts the UI needs. */
+function describePublish(
+  at: Date | null,
+  timeZone: string,
+): BundlePublish | null {
+  if (!at) return null;
+  return {
+    label: formatInTz(at, timeZone),
+    date: zonedYmd(at, timeZone),
+    time: zonedTime(at, timeZone),
+  };
+}
+
 type ArtifactRow = {
   id: string;
   filename: string;
@@ -100,7 +116,7 @@ function toRender(row: ArtifactRow): WorkRender {
     id: row.id,
     filename: row.filename,
     relPath: row.relPath,
-    url: mediaUrl(row.relPath),
+    url: mediaUrl(row.relPath, row.id),
     width: row.width,
     height: row.height,
     sizeLabel: sizeLabel(row.width, row.height),
@@ -162,20 +178,23 @@ export function majorityRatio(ratios: string[]): {
 export async function listWorkBundles(
   projectId: string,
 ): Promise<WorkBundleSummary[]> {
-  const rows = await db.workBundle.findMany({
-    where: { projectId },
-    orderBy: { updatedAt: "desc" },
-    include: {
-      items: {
-        orderBy: { order: "asc" },
-        select: {
-          artifact: {
-            select: { id: true, relPath: true, width: true, height: true },
+  const [timezone, rows] = await Promise.all([
+    getAppTimezone(),
+    db.workBundle.findMany({
+      where: { projectId },
+      orderBy: { updatedAt: "desc" },
+      include: {
+        items: {
+          orderBy: { order: "asc" },
+          select: {
+            artifact: {
+              select: { id: true, relPath: true, width: true, height: true },
+            },
           },
         },
       },
-    },
-  });
+    }),
+  ]);
 
   return rows.map((bundle) => {
     const artifacts = bundle.items.map((i) => i.artifact);
@@ -188,11 +207,12 @@ export async function listWorkBundles(
       count: artifacts.length,
       covers: artifacts.slice(0, 3).map((a) => ({
         id: a.id,
-        url: mediaUrl(a.relPath),
+        url: mediaUrl(a.relPath, a.id),
       })),
       ratio,
       mixedRatio: mixed,
       updatedLabel: describeWhen(bundle.updatedAt).updatedLabel,
+      publish: describePublish(bundle.publishAt, timezone),
     };
   });
 }
@@ -200,15 +220,18 @@ export async function listWorkBundles(
 export async function getWorkBundle(
   bundleId: string,
 ): Promise<WorkBundleDetail | null> {
-  const bundle = await db.workBundle.findUnique({
-    where: { id: bundleId },
-    include: {
-      items: {
-        orderBy: { order: "asc" },
-        select: { id: true, artifact: { select: ARTIFACT_SELECT } },
+  const [timezone, bundle] = await Promise.all([
+    getAppTimezone(),
+    db.workBundle.findUnique({
+      where: { id: bundleId },
+      include: {
+        items: {
+          orderBy: { order: "asc" },
+          select: { id: true, artifact: { select: ARTIFACT_SELECT } },
+        },
       },
-    },
-  });
+    }),
+  ]);
   if (!bundle) return null;
 
   const items = bundle.items.map((item) => ({
@@ -224,5 +247,7 @@ export async function getWorkBundle(
     items,
     ratio: majorityRatio(items.map((i) => i.render.ratio)).ratio,
     updatedLabel: describeWhen(bundle.updatedAt).updatedLabel,
+    publish: describePublish(bundle.publishAt, timezone),
+    timezone,
   };
 }

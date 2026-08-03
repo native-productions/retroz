@@ -47,6 +47,12 @@ export interface RunToolContext {
   taskRunId: string;
   /** Decides which image-reading tool a result points the agent at. */
   provider: AgentProvider;
+  /**
+   * The image-reading tool this run actually has, or null when the engine
+   * cannot see images (a text-only provider model). See imageToolName in
+   * lib/models.ts.
+   */
+  imageTool: string | null;
   /** Local directory the agent renders into. */
   outDirAbs: string;
   /** Storage key prefix those outputs are persisted under. */
@@ -177,13 +183,15 @@ export const RUN_TOOLS: RunToolDef[] = [
           // The PNG is kept deliberately: the agent needs to see what it got
           // wrong, and the run viewer should show the broken frame rather than a
           // gap. The failure is what forces the correction.
-          const viewTool = ctx.provider === "CODEX" ? "view_image" : "Read";
+          const inspect = ctx.imageTool
+            ? `Use the "${ctx.imageTool}" tool on that path to see the damage, then fix`
+            : "Fix";
           return text(
             [
               `REJECTED ${res.filename} — the rendered frame is broken:`,
               formatRenderIssues(res.issues),
               "",
-              `The PNG was still written to ${res.absPath}. Use the "${viewTool}" tool on that path to see the damage, then fix the HTML and call render_html_to_png again with the SAME filename "${res.filename}" to replace it.`,
+              `The PNG was still written to ${res.absPath}. ${inspect} the HTML and call render_html_to_png again with the SAME filename "${res.filename}" to replace it.`,
               "Fix the layout — do not hide the problem with overflow:hidden, and do not move on to the next image until this one renders clean.",
             ].join("\n"),
             true,

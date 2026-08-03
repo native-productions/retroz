@@ -2,21 +2,51 @@
 
 import { revalidatePath } from "next/cache";
 import { db } from "@/lib/db-client";
+import { getAppTimezone } from "@/lib/app-timezone";
+import { zonedInstant } from "@/lib/campaign-time";
 import {
   workBundleAddSchema,
   workBundleCreateSchema,
   workBundleReorderSchema,
+  workBundleScheduleSchema,
   workBundleUpdateSchema,
 } from "@/lib/validation";
 
 // Write side of bundles. A bundle owns no files — every item is a pointer at a
-// RunArtifact — so these actions only ever move ids and `order` around.
+// RunArtifact — so these actions only ever move ids and `order` around, plus the
+// one date a bundle does own: when it is meant to be posted.
+
+/** The hour a bundle lands on when a date is set without one. */
+const DEFAULT_PUBLISH_TIME = "09:00";
 
 /** Revalidate every project surface a bundle change can show up on. */
 function revalidateProject(projectId: string) {
   revalidatePath(`/work/p/${projectId}/gallery`);
   revalidatePath(`/work/p/${projectId}/bundles`);
   revalidatePath("/work");
+  revalidatePath("/calendar");
+}
+
+/**
+ * Resolve a wall-clock publish slot into the instant to store.
+ *
+ * Only the server knows `AppSetting.timezone`, so this is the one place the
+ * conversion happens. `undefined` means the caller did not touch the date and
+ * the column is left alone; `null` clears it.
+ */
+async function resolvePublishAt(
+  publishDate: string | null | undefined,
+  publishTime: string | undefined,
+): Promise<Date | null | undefined> {
+  if (publishDate === undefined) return undefined;
+  if (publishDate === null) return null;
+  const timezone = await getAppTimezone();
+  return zonedInstant(
+    publishDate,
+    0,
+    publishTime ?? DEFAULT_PUBLISH_TIME,
+    timezone,
+  );
 }
 
 /**
@@ -46,10 +76,13 @@ export async function createWorkBundle(input: unknown) {
     throw new Error("None of those renders belong to this project.");
   }
 
+  const publishAt = await resolvePublishAt(data.publishDate, data.publishTime);
+
   const bundle = await db.workBundle.create({
     data: {
       projectId: data.projectId,
       name: data.name,
+      publishAt: publishAt ?? null,
       items: {
         create: artifactIds.map((artifactId, order) => ({ artifactId, order })),
       },
@@ -69,6 +102,25 @@ export async function updateWorkBundle(input: unknown) {
       ...(data.name === undefined ? {} : { name: data.name }),
       ...(data.note === undefined ? {} : { note: data.note }),
     },
+    select: { projectId: true },
+  });
+
+  revalidateProject(bundle.projectId);
+  revalidatePath(`/work/p/${bundle.projectId}/bundles/${data.id}`);
+}
+
+/**
+ * Move a bundle to another publish slot, or clear it. The single entry point
+ * the Calendar uses for both the drop handler and the entry dialog.
+ */
+export async function scheduleWorkBundle(input: unknown) {
+  const data = workBundleScheduleSchema.parse(input);
+  const publishAt = await resolvePublishAt(data.publishDate, data.publishTime);
+  if (publishAt === undefined) return;
+
+  const bundle = await db.workBundle.update({
+    where: { id: data.id },
+    data: { publishAt },
     select: { projectId: true },
   });
 

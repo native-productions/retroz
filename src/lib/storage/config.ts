@@ -11,9 +11,20 @@ export const S3_PUBLIC_BASE = (
   process.env.NEXT_PUBLIC_S3_PUBLIC_BASE ?? ""
 ).replace(/\/+$/, "");
 
-/** Browser-reachable URL for a storage key. */
-export function publicUrlFor(key: string): string {
+/**
+ * Browser-reachable URL for a storage key.
+ *
+ * `version` is a cache-buster for keys that get rewritten in place. Re-rendering
+ * a slide overwrites its object, so the URL alone is not enough: the browser
+ * (and, on a public bucket, the CDN) would keep serving the image the user asked
+ * to change until a reload. Pass something that changes with the bytes — the
+ * RunArtifact row id is new on every render.
+ */
+export function publicUrlFor(key: string, version?: string | null): string {
   const clean = key.replace(/\\/g, "/").replace(/^\/+/, "");
-  if (!S3_PUBLIC_BASE) return `/api/media?path=${encodeURIComponent(clean)}`;
-  return `${S3_PUBLIC_BASE}/${clean.split("/").map(encodeURIComponent).join("/")}`;
+  const url = S3_PUBLIC_BASE
+    ? `${S3_PUBLIC_BASE}/${clean.split("/").map(encodeURIComponent).join("/")}`
+    : `/api/media?path=${encodeURIComponent(clean)}`;
+  if (!version) return url;
+  return `${url}${url.includes("?") ? "&" : "?"}v=${encodeURIComponent(version)}`;
 }

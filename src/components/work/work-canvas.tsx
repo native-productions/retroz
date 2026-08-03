@@ -16,6 +16,7 @@ import {
 import { cn } from "@/lib/cn";
 import { Lightbox } from "@/components/run/image-lightbox";
 import { WorkCaptionPanel } from "@/components/work/work-caption";
+import { WorkBundleDialog } from "@/components/work/work-bundle-dialog";
 import {
   addArtifactsToBundle,
   createWorkBundle,
@@ -59,6 +60,7 @@ export function WorkCanvas({
 }) {
   const [planOpen, setPlanOpen] = React.useState(true);
   const [lightboxIndex, setLightboxIndex] = React.useState<number | null>(null);
+  const [bundleOpen, setBundleOpen] = React.useState(false);
 
   const done = plan.filter((s) => s.status === "done").length;
 
@@ -197,12 +199,36 @@ export function WorkCanvas({
             ))}
           </div>
         )}
+
+        {/* Sits under the grid rather than in the section header: it acts on
+            every render above it, so it reads as the end of that list. */}
+        {projectId && results.length > 0 ? (
+          <button
+            type="button"
+            onClick={() => setBundleOpen(true)}
+            className="mt-2.5 flex w-full items-center justify-center gap-2 rounded-[var(--radius-retro)] border-2 border-dashed border-border-soft px-3 py-2.5 font-display text-xs font-semibold text-fg-muted outline-none transition-colors hover:border-border hover:bg-surface-2 hover:text-fg focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.99]"
+          >
+            <Layers className="size-3.5" />
+            Save as bundle
+          </button>
+        ) : null}
       </div>
+
+      {projectId ? (
+        <WorkBundleDialog
+          projectId={projectId}
+          artifactIds={results.map((r) => r.id)}
+          defaultName={sessionTitle || "Untitled bundle"}
+          open={bundleOpen}
+          onOpenChange={setBundleOpen}
+        />
+      ) : null}
 
       <Lightbox
         images={results.map((r) => ({
           filename: r.filename,
           relPath: r.relPath,
+          url: r.url,
         }))}
         index={lightboxIndex}
         onIndexChange={setLightboxIndex}
