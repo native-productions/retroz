@@ -3,7 +3,7 @@
   "configVersion": 1,
   "workspaces": {
     "": {
-      "name": "productivity",
+      "name": "retroz",
       "dependencies": {
         "@ai-sdk/google": "^4.0.31",
         "@ai-sdk/openai-compatible": "^3.0.20",
