@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Images, Layers, TriangleAlert } from "lucide-react";
+import { CalendarClock, Images, Layers, TriangleAlert } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { Button } from "@/components/ui/ui-button";
 import { CAROUSEL_LIMIT, type WorkBundleSummary } from "@/lib/work-types";
@@ -71,6 +71,12 @@ export function WorkBundleGrid({
                 {bundle.ratio ? <span>· {bundle.ratio}</span> : null}
                 <span>· {bundle.updatedLabel}</span>
               </p>
+              {bundle.publish ? (
+                <p className="mt-1.5 flex items-center gap-1 font-mono text-[10px] text-primary">
+                  <CalendarClock className="size-3" />
+                  {bundle.publish.label}
+                </p>
+              ) : null}
               {bundle.mixedRatio ? (
                 <p className="mt-1.5 flex items-center gap-1 font-mono text-[10px] text-danger">
                   <TriangleAlert className="size-3" />

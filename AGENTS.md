@@ -54,7 +54,7 @@ the seeded `SEED_USER_EMAIL` / `SEED_USER_PASSWORD`.
 src/
   app/
     (app)/            authed pages — dashboard, workflows, assets, tasks,
-                      runs, fonts, skills, settings
+                      runs, calendar, fonts, skills, settings
     login/            unauthenticated login
     api/              route handlers (Node runtime only):
                         assets/upload, fonts/upload, fonts/catalog,
@@ -91,6 +91,12 @@ src/
     run-queue.ts        p-queue, concurrency 1 (never 2 agent spawns at once)
     run-bus.ts          in-process pub/sub for live SSE
     cron-scheduler.ts   node-cron jobs, booted from instrumentation.ts
+    calendar-queries.ts the Calendar read model — merges four scheduled systems
+                        (bundle publishAt, cron occurrences, campaign items,
+                        past runs) into one month grid, all formatted server-side
+    app-timezone.ts     the single reader of AppSetting.timezone
+    campaign-time.ts    DST-safe zone helpers (zonedInstant / formatInTz /
+                        zonedYmd / zonedTime) — the only correct date maths here
     google-fonts.ts     download a font's woff2 (latin subset) from css2 API
     google-fonts-catalog.ts   keyless catalog search (metadata/fonts endpoint)
     font-css.ts         build @font-face (file:// woff2) for the renderer
@@ -98,7 +104,7 @@ src/
     actions/            server actions (CRUD): workflow/asset/task/schedule/
                         skill/font/settings-actions.ts
   components/           ui/* (retro kit) + workflow/ asset/ task/ run/
-                        schedule/ skill/ font/ feature components
+                        schedule/ calendar/ skill/ font/ feature components
   instrumentation.ts    boots the scheduler on server start
   proxy.ts              auth gate (Next 16 renamed middleware → proxy)
   generated/prisma/     generated client (gitignored)
@@ -188,6 +194,11 @@ data/                   assets + task outputs + fonts (gitignored)
   also returns `models/<slug>` while the API wants `<slug>`, and it lists every
   modality it serves — `provider-catalog.ts` strips the prefix and keeps only
   `generateContent` chat models.
+- **Never build a scheduled date with `setHours`.** Every scheduled instant is a
+  wall-clock time in `AppSetting.timezone` (or the schedule's / campaign's own
+  zone): resolve with `zonedInstant`, read back with `zonedYmd` / `zonedTime` /
+  `formatInTz`. `cron-expr.computeNextRun` is the one server-local holdout and is
+  display-only for a schedule row — the Calendar uses `expandCadence` instead.
 - A run in PROVIDER mode stores the **ApiProviderModel row id** in
   `TaskRun.model`, not a slug. Render it with `modelLabel(value, labels)` using
   the map from `getModelCatalog()`, or it shows as a raw cuid.

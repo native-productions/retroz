@@ -78,6 +78,9 @@ model AppSetting {
   // Tavily web-research integration. Empty = feature disabled (the web tools are
   // never registered, so no agent sees them).
   tavilyApiKey   String         @default("")
+  // IANA zone every scheduled surface renders in — the Calendar, bundle publish
+  // dates, and the labels beside cron schedules and campaign slots.
+  timezone       String         @default("Asia/Jakarta")
   assetsRoot     String         @default("data/assets")
   tasksRoot      String         @default("data/tasks")
   updatedAt      DateTime       @updatedAt
@@ -737,14 +740,19 @@ model WorkBundle {
   projectId String
   project   WorkProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
 
-  name      String
-  note      String   @default("")
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  name String
+  note String @default("")
+  // Instant the bundle is meant to be posted, resolved from a wall-clock date +
+  // time in AppSetting.timezone. Null = unscheduled. Read by the Calendar, and
+  // the column a future auto-publisher would tick on.
+  publishAt DateTime?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
 
   items WorkBundleItem[]
 
   @@index([projectId])
+  @@index([publishAt])
 }
 
 model WorkBundleItem {

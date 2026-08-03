@@ -10,6 +10,33 @@ const ASPECT_RATIO_IDS = ASPECT_RATIOS.map((r) => r.id) as [string, ...string[]]
 
 const researchModeEnum = z.enum(["OFF", "AUTO", "ON"]);
 
+/** True when the runtime recognises the string as an IANA zone. */
+export function isTimeZone(value: string): boolean {
+  try {
+    new Intl.DateTimeFormat("en-GB", { timeZone: value });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * A wall-clock publish slot, kept as separate date and time strings all the way
+ * to the server: only the server knows `AppSetting.timezone`, so it is the only
+ * place that can turn them into a correct instant.
+ */
+const publishFields = {
+  publishDate: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, "Use YYYY-MM-DD")
+    .nullable()
+    .optional(),
+  publishTime: z
+    .string()
+    .regex(/^([01]\d|2[0-3]):[0-5]\d$/, "Use HH:mm")
+    .optional(),
+};
+
 export const workflowCreateSchema = z.object({
   name: z.string().min(1, "Name is required").max(80),
   description: z.string().max(300).optional(),
@@ -193,12 +220,23 @@ export const workBundleCreateSchema = z.object({
   projectId: z.string().min(1),
   name: z.string().min(1, "Name the bundle").max(80),
   artifactIds: z.array(z.string().min(1)).min(1).max(200),
+  ...publishFields,
 });
 
 export const workBundleUpdateSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1, "Name the bundle").max(80).optional(),
   note: z.string().max(1000).optional(),
+});
+
+/**
+ * Reschedule (or unschedule) a bundle. `publishDate: null` clears the date;
+ * omitting it entirely is a no-op, so a caller that only knows the time cannot
+ * accidentally wipe the day.
+ */
+export const workBundleScheduleSchema = z.object({
+  id: z.string().min(1),
+  ...publishFields,
 });
 
 export const workBundleAddSchema = z.object({
@@ -244,6 +282,12 @@ export const settingsUpdateSchema = z.object({
   defaultProviderModelId: z.string().nullable().default(null),
   pexelsApiKey: z.string().trim().max(200).default(""),
   tavilyApiKey: z.string().trim().max(200).default(""),
+  timezone: z
+    .string()
+    .trim()
+    .min(1)
+    .max(64)
+    .refine(isTimeZone, "Not a timezone the system knows, e.g. Asia/Jakarta"),
 });
 
 // --- OpenAI-compatible providers -------------------------------------------

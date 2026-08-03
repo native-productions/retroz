@@ -298,7 +298,7 @@ export async function getDashboardData(): Promise<DashboardData> {
       id: a.id,
       filename: a.filename,
       relPath: a.relPath,
-      url: mediaUrl(a.relPath),
+      url: mediaUrl(a.relPath, a.id),
       origin: session ? session.title : a.taskRun.task.workflow.name,
       originKind: session ? "work" : "run",
       href: session ? `/work/${session.id}` : `/runs/${a.taskRun.id}`,

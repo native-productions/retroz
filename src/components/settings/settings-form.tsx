@@ -29,6 +29,8 @@ import {
   type CodexReasoningEffort,
 } from "@/lib/models";
 import { updateSettings } from "@/lib/actions/settings-actions";
+import { isTimeZone } from "@/lib/validation";
+import { formatInTz } from "@/lib/campaign-time";
 import { ProvidersCard } from "@/components/settings/providers-card";
 import type { ProviderView } from "@/lib/actions/provider-actions";
 import { cn } from "@/lib/cn";
@@ -49,6 +51,7 @@ interface SettingsValues {
   defaultProviderModelId: string | null;
   pexelsApiKey: string;
   tavilyApiKey: string;
+  timezone: string;
 }
 
 export function SettingsForm({
@@ -78,12 +81,25 @@ export function SettingsForm({
 
   const providerModels = providers.filter((p) => p.models.length > 0);
 
+  // A zone only means something if the runtime can format with it, so the field
+  // checks itself as you type rather than throwing on save. The clock preview
+  // waits for mount: the server and the browser would render different minutes.
+  const zone = values.timezone.trim();
+  const zoneValid = isTimeZone(zone);
+  const [zoneNow, setZoneNow] = React.useState<string | null>(null);
+  React.useEffect(() => {
+    setZoneNow(zoneValid ? formatInTz(new Date(), zone) : null);
+  }, [zone, zoneValid]);
+  const zonePreview = zoneNow ? `Right now that reads ${zoneNow}.` : undefined;
+
   async function save() {
+    if (!zoneValid) return;
     setState("saving");
     await updateSettings({
       ...values,
       pexelsApiKey: values.pexelsApiKey.trim(),
       tavilyApiKey: values.tavilyApiKey.trim(),
+      timezone: zone,
     });
     setState("saved");
     // Every model selector in the app reads the catalog loaded by the shell, so
@@ -103,6 +119,7 @@ export function SettingsForm({
           ) : null}
         </TabsTrigger>
         <TabsTrigger value="integrations">Integrations</TabsTrigger>
+        <TabsTrigger value="schedule">Schedule</TabsTrigger>
       </TabsList>
 
       {/* --- Engine ------------------------------------------------------- */}
@@ -363,9 +380,39 @@ export function SettingsForm({
         </Card>
       </TabsContent>
 
+      {/* --- Schedule ----------------------------------------------------- */}
+      <TabsContent value="schedule" className="flex flex-col gap-5">
+        <Card>
+          <CardHeader>
+            <CardTitle>Timezone</CardTitle>
+            <CardDescription>
+              Every scheduled time is read and written in this zone: bundle
+              publish slots on the Calendar, cron run times, and campaign posts.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Field
+              label="IANA zone"
+              hint={zonePreview}
+              error={zoneValid ? undefined : "Not a zone this machine knows."}
+            >
+              <Input
+                value={values.timezone}
+                onChange={(e) => set("timezone", e.target.value)}
+                placeholder="Asia/Jakarta"
+                autoComplete="off"
+                spellCheck={false}
+                className="max-w-lg font-mono"
+              />
+            </Field>
+          </CardContent>
+        </Card>
+      </TabsContent>
+
       <SaveBar
         visible={dirty || state !== "idle"}
         state={state}
+        blocked={!zoneValid}
         onSave={save}
         onDiscard={() => setValues(initial)}
       />
@@ -415,11 +462,14 @@ function ModeChoice({
 function SaveBar({
   visible,
   state,
+  blocked,
   onSave,
   onDiscard,
 }: {
   visible: boolean;
   state: "idle" | "saving" | "saved";
+  /** A field is invalid — saving would only throw, so the button stays off. */
+  blocked?: boolean;
   onSave: () => void;
   onDiscard: () => void;
 }) {
@@ -436,7 +486,11 @@ function SaveBar({
       )}
     >
       <p className="font-mono text-xs uppercase tracking-wide text-fg-muted">
-        {state === "saved" ? "Settings saved" : "Unsaved changes"}
+        {state === "saved"
+          ? "Settings saved"
+          : blocked
+            ? "Fix the highlighted field"
+            : "Unsaved changes"}
       </p>
       <div className="flex items-center gap-2">
         <Button
@@ -447,7 +501,11 @@ function SaveBar({
         >
           Discard
         </Button>
-        <Button size="sm" onClick={onSave} disabled={state !== "idle"}>
+        <Button
+          size="sm"
+          onClick={onSave}
+          disabled={state !== "idle" || Boolean(blocked)}
+        >
           {state === "saving" ? (
             <LoaderCircle className="size-4 animate-spin" />
           ) : state === "saved" ? (

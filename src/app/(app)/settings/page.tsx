@@ -34,6 +34,7 @@ export default async function SettingsPage() {
             defaultProviderModelId: settings.defaultProviderModelId,
             pexelsApiKey: settings.pexelsApiKey,
             tavilyApiKey: settings.tavilyApiKey,
+            timezone: settings.timezone,
           }}
           providers={providers}
           apiKeyPresent={apiKeyPresent}

@@ -173,6 +173,22 @@ export interface WorkBundleSummary {
   /** True when at least one slide breaks that ratio. */
   mixedRatio: boolean;
   updatedLabel: string;
+  /** Publish slot in the app timezone, or null when unscheduled. */
+  publish: BundlePublish | null;
+}
+
+/**
+ * A bundle's publish slot, split the way the editor needs it: preformatted for
+ * display, plus the date and time parts a form control binds to. All three are
+ * derived server-side from one instant so they can never disagree.
+ */
+export interface BundlePublish {
+  /** "Sat 18 Jul 2026, 09:00" in the app timezone. */
+  label: string;
+  /** "YYYY-MM-DD" in the app timezone. */
+  date: string;
+  /** "HH:mm" in the app timezone. */
+  time: string;
 }
 
 export interface WorkBundleItem {
@@ -190,4 +206,8 @@ export interface WorkBundleDetail {
   /** The ratio most slides share, or "" for an empty bundle. */
   ratio: string;
   updatedLabel: string;
+  /** Publish slot in the app timezone, or null when unscheduled. */
+  publish: BundlePublish | null;
+  /** The zone `publish` is expressed in, shown beside the controls. */
+  timezone: string;
 }

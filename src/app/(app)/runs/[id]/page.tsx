@@ -33,6 +33,16 @@ export default async function RunPage({
 
   const runFolder = run.outputRelPath?.split("/").pop() ?? run.id;
 
+  // Re-rendering a filename overwrites the file on disk, so a path can have
+  // several RunArtifact rows — only the newest is real. Map.set keeps the entry
+  // at the position the path first appeared, so the gallery stays in render
+  // order while carrying the latest row's dimensions. The live stream already
+  // dedupes the same way (`seenArtifact` in run-viewer); this is the seed it
+  // was missing.
+  const byPath = new Map<string, (typeof run.artifacts)[number]>();
+  for (const a of run.artifacts) byPath.set(a.relPath, a);
+  const artifacts = [...byPath.values()];
+
   return (
     <>
       <PageHeader
@@ -54,7 +64,7 @@ export default async function RunPage({
           taskId={run.taskId}
           initialStatus={run.status}
           initialEvents={logEvents}
-          initialArtifacts={run.artifacts.map((a) => ({
+          initialArtifacts={artifacts.map((a) => ({
             id: a.id,
             filename: a.filename,
             relPath: a.relPath,

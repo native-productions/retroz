@@ -434,7 +434,7 @@ async function listProjectRenders(
     byPath.set(row.relPath, {
       id: row.id,
       name: row.filename,
-      url: mediaUrl(row.relPath),
+      url: mediaUrl(row.relPath, row.id),
       relPath: row.relPath,
       origin: "render",
       sourceLabel: from?.title ?? "",

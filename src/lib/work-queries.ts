@@ -227,7 +227,9 @@ export async function getWorkSessionDetail(
         id: a.id,
         filename: a.filename,
         relPath: a.relPath,
-        url: mediaUrl(a.relPath),
+        // Versioned by row id: a revision writes the same path, and the browser
+        // would otherwise keep the image the user just asked to change.
+        url: mediaUrl(a.relPath, a.id),
         sizeLabel: a.width && a.height ? `${a.width} × ${a.height}` : "",
       });
     }

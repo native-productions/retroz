@@ -34,6 +34,13 @@ one machine. Single-user, single-tenant, offline-friendly after fonts download.
 - **Run** — one execution of a task. Produces a clean, timestamped output folder
   of PNGs and a live activity log.
 - **Schedule** — run a task automatically (daily / weekly / monthly) via cron.
+- **Bundle** — an ordered set of renders, the unit a carousel is posted as. It
+  can carry an optional **publish date**.
+- **Calendar** — one month view of everything scheduled: bundles waiting to be
+  posted, cron runs still to fire, campaign slots, and the runs already done.
+  Bundles are dragged between days to reschedule them. All times are read in the
+  app timezone (Settings › Schedule). The dashboard carries a two-week strip of
+  the same data.
 - **Skill** — a reusable content recipe written to `.claude/skills/*/SKILL.md`;
   Claude also loads the user's global `~/.claude/skills`.
 
@@ -76,7 +83,8 @@ in phase 1).
 upload + descriptions, the Claude engine (runner, `render_html_to_png` MCP tool,
 serial queue, live SSE run viewer), tasks + manual runs, cron scheduling, skills
 manager, Font Bank (Google search/download, URL, upload, mood tags, pairings,
-per-workflow assignment), retro design system. All verified end-to-end.
+per-workflow assignment), bundles + publish dates, the Calendar, retro design
+system. All verified end-to-end.
 
 ## Roadmap / not yet
 

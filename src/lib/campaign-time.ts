@@ -95,6 +95,20 @@ export function formatInTz(date: Date, timeZone: string): string {
   }).format(date);
 }
 
+/** The calendar day an instant falls on *in a zone*, "YYYY-MM-DD". */
+export function zonedYmd(date: Date, timeZone: string): string {
+  const p = partsInTz(date, timeZone);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${p.y}-${pad(p.mo)}-${pad(p.d)}`;
+}
+
+/** The wall-clock time an instant reads in a zone, "HH:mm". */
+export function zonedTime(date: Date, timeZone: string): string {
+  const p = partsInTz(date, timeZone);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${pad(p.h)}:${pad(p.mi)}`;
+}
+
 /** "YYYY-MM-DD" for a Date's UTC calendar day (used to seed a start date). */
 export function toYmd(date: Date): string {
   const pad = (n: number) => String(n).padStart(2, "0");

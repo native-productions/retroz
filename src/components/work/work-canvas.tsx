@@ -228,6 +228,7 @@ export function WorkCanvas({
         images={results.map((r) => ({
           filename: r.filename,
           relPath: r.relPath,
+          url: r.url,
         }))}
         index={lightboxIndex}
         onIndexChange={setLightboxIndex}

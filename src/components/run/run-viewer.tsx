@@ -73,9 +73,6 @@ export function RunViewer({
   const seenSeq = React.useRef(
     new Set(initialEvents.map((e) => e.seq)),
   );
-  const seenArtifact = React.useRef(
-    new Set(initialArtifacts.map((a) => a.relPath)),
-  );
   const logEndRef = React.useRef<HTMLDivElement>(null);
   const [lightboxIndex, setLightboxIndex] = React.useState<number | null>(null);
 
@@ -94,10 +91,16 @@ export function RunViewer({
 
       if (event.type === "ARTIFACT") {
         const a = event.payload as unknown as Artifact;
-        if (!seenArtifact.current.has(a.relPath)) {
-          seenArtifact.current.add(a.relPath);
-          setArtifacts((prev) => [...prev, a]);
-        }
+        // A re-render writes the same path, so the newest row replaces the old
+        // one in place rather than being dropped as a duplicate — its id is
+        // what busts the browser's copy of the previous image.
+        setArtifacts((prev) => {
+          const at = prev.findIndex((p) => p.relPath === a.relPath);
+          if (at === -1) return [...prev, a];
+          const next = [...prev];
+          next[at] = a;
+          return next;
+        });
         return;
       }
       if (event.type === "STATUS") {
@@ -216,14 +219,14 @@ export function RunViewer({
             <div className="grid grid-cols-2 gap-3">
               {artifacts.map((a, i) => (
                 <button
-                  key={a.relPath}
+                  key={a.id ?? a.relPath}
                   type="button"
                   onClick={() => setLightboxIndex(i)}
                   className="group flex flex-col gap-1 text-left"
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img
-                    src={mediaUrl(a.relPath)}
+                    src={mediaUrl(a.relPath, a.id)}
                     alt={a.filename}
                     className="w-full rounded-[4px] border-2 border-border object-cover retro-press"
                   />
@@ -238,7 +241,11 @@ export function RunViewer({
       </div>
 
       <Lightbox
-        images={artifacts}
+        images={artifacts.map((a) => ({
+          filename: a.filename,
+          relPath: a.relPath,
+          url: mediaUrl(a.relPath, a.id),
+        }))}
         index={lightboxIndex}
         onIndexChange={setLightboxIndex}
         onClose={() => setLightboxIndex(null)}

@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { ArrowRight, LoaderCircle } from "lucide-react";
 import { Button } from "@/components/ui/ui-button";
 import { Input } from "@/components/ui/ui-input";
+import { DatePicker } from "@/components/ui/ui-date-picker";
 import { Field } from "@/components/ui/ui-label";
 import {
   Dialog,
@@ -44,6 +45,8 @@ export function WorkBundleDialog({
 }) {
   const router = useRouter();
   const [name, setName] = React.useState(defaultName);
+  const [publishDate, setPublishDate] = React.useState("");
+  const [publishTime, setPublishTime] = React.useState("09:00");
   const [saving, setSaving] = React.useState(false);
   const [savedId, setSavedId] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
@@ -53,6 +56,8 @@ export function WorkBundleDialog({
   React.useEffect(() => {
     if (!open) return;
     setName(defaultName);
+    setPublishDate("");
+    setPublishTime("09:00");
     setSavedId(null);
     setError(null);
   }, [open, defaultName]);
@@ -67,6 +72,8 @@ export function WorkBundleDialog({
         projectId,
         name: trimmed,
         artifactIds,
+        publishDate: publishDate || null,
+        publishTime,
       });
       setSavedId(bundle.id);
       router.refresh();
@@ -115,6 +122,39 @@ export function WorkBundleDialog({
                 autoFocus
               />
             </Field>
+            <div className="flex flex-wrap gap-3">
+              <Field
+                label="Publish date"
+                htmlFor="work-bundle-date"
+                hint={
+                  publishDate
+                    ? undefined
+                    : "Optional. A date puts this bundle on the Calendar."
+                }
+              >
+                <DatePicker
+                  id="work-bundle-date"
+                  value={publishDate}
+                  onChange={setPublishDate}
+                  className="w-52"
+                />
+              </Field>
+              {publishDate ? (
+                <Field
+                  label="Time"
+                  htmlFor="work-bundle-time"
+                  hint="App timezone — Settings › Schedule."
+                >
+                  <Input
+                    id="work-bundle-time"
+                    type="time"
+                    value={publishTime}
+                    onChange={(e) => setPublishTime(e.target.value)}
+                    className="w-32"
+                  />
+                </Field>
+              ) : null}
+            </div>
             {error ? <p className="text-xs text-danger">{error}</p> : null}
           </DialogBody>
         )}
