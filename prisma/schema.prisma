@@ -746,8 +746,12 @@ model WorkBundle {
   // time in AppSetting.timezone. Null = unscheduled. Read by the Calendar, and
   // the column a future auto-publisher would tick on.
   publishAt DateTime?
-  createdAt DateTime  @default(now())
-  updatedAt DateTime  @updatedAt
+  // Unguessable token behind the phone share link. Null = not shared; issuing a
+  // new one revokes the old link, because the column holds exactly one.
+  shareToken String?   @unique
+  sharedAt   DateTime?
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 
   items WorkBundleItem[]
 

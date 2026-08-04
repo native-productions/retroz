@@ -26,6 +26,7 @@ import {
   CalendarClock,
   Images,
   LoaderCircle,
+  Share2,
   Trash2,
   TriangleAlert,
   X,
@@ -34,6 +35,7 @@ import { cn } from "@/lib/cn";
 import { Button } from "@/components/ui/ui-button";
 import { useConfirm } from "@/components/confirm-provider";
 import { Lightbox } from "@/components/run/image-lightbox";
+import { WorkShareDialog } from "@/components/work/work-share-dialog";
 import { Input } from "@/components/ui/ui-input";
 import { DatePicker } from "@/components/ui/ui-date-picker";
 import {
@@ -134,6 +136,7 @@ export function WorkBundleEditor({ bundle }: { bundle: WorkBundleDetail }) {
   const [name, setName] = React.useState(bundle.name);
   const [busy, setBusy] = React.useState(false);
   const [lightboxIndex, setLightboxIndex] = React.useState<number | null>(null);
+  const [shareOpen, setShareOpen] = React.useState(false);
 
   const sensors = useSensors(
     // A short threshold keeps a plain click available for the lightbox.
@@ -245,6 +248,15 @@ export function WorkBundleEditor({ bundle }: { bundle: WorkBundleDetail }) {
             Download
           </a>
         </Button>
+        <Button
+          size="sm"
+          variant="primary"
+          onClick={() => setShareOpen(true)}
+          disabled={items.length === 0}
+        >
+          <Share2 className="size-4" />
+          Share
+        </Button>
       </div>
 
       <PublishRow bundle={bundle} />
@@ -311,6 +323,21 @@ export function WorkBundleEditor({ bundle }: { bundle: WorkBundleDetail }) {
           Delete bundle
         </Button>
       </div>
+
+      {/* Mounted only while open: the dialog reads this machine's LAN addresses
+          on mount, so every reopen re-reads them after a network change. */}
+      {shareOpen ? (
+        <WorkShareDialog
+          bundleId={bundle.id}
+          bundleName={bundle.name}
+          slides={items.map((i) => ({
+            url: i.render.url,
+            filename: i.render.filename,
+          }))}
+          open
+          onOpenChange={setShareOpen}
+        />
+      ) : null}
 
       <Lightbox
         images={items.map((i) => ({

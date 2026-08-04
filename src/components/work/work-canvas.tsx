@@ -84,134 +84,141 @@ export function WorkCanvas({
         </button>
       </div>
 
-      <section className="border-b-2 border-border-soft">
-        <button
-          type="button"
-          onClick={() => setPlanOpen((v) => !v)}
-          aria-expanded={planOpen}
-          className="flex w-full items-center gap-2 px-3.5 py-2.5 text-left outline-none transition-colors hover:bg-surface-2/60 focus-visible:ring-2 focus-visible:ring-ring"
-        >
-          <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-fg-muted/70">
-            Plan
-          </span>
-          <span className="font-mono text-[10px] text-fg-muted">
-            {done}/{plan.length}
-          </span>
-          <span className="flex-1" />
-          <ChevronDown
-            className={cn(
-              "size-3.5 text-fg-muted",
-              `transition-transform ${MOTION} motion-reduce:transition-none`,
-              !planOpen && "-rotate-90",
-            )}
-          />
-        </button>
-
-        <div
-          className={cn(
-            "grid",
-            `transition-[grid-template-rows] ${MOTION} motion-reduce:transition-none`,
-          )}
-          style={{ gridTemplateRows: planOpen ? "1fr" : "0fr" }}
-        >
-          <div className="overflow-hidden">
-            {plan.length === 0 ? (
-              <p className="px-3.5 pb-3.5 text-xs text-fg-muted">
-                Nothing planned. Retroz keeps a checklist here for requests that
-                take more than one step.
-              </p>
-            ) : (
-              <ol className="flex flex-col px-3.5 pb-3.5">
-                {plan.map((step, i) => (
-                  <PlanRow
-                    key={step.id}
-                    step={step}
-                    index={i + 1}
-                    last={i === plan.length - 1}
-                  />
-                ))}
-              </ol>
-            )}
-          </div>
-        </div>
-      </section>
-
-      <WorkCaptionPanel
-        caption={caption}
-        hasRenders={results.length > 0}
-        busy={busy}
-        onGenerate={onGenerateCaption}
-      />
-
-      <div className="flex items-center justify-between gap-2 px-3.5 py-2.5">
-        <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-fg-muted/70">
-          Renders
-        </span>
-        <span className="font-mono text-[10px] text-fg-muted">
-          {results.length}
-        </span>
-      </div>
-
-      <div className="flex-1 overflow-y-auto px-3.5 pb-4">
-        {results.length === 0 ? (
-          <div className="rounded-[var(--radius-retro)] border-2 border-dashed border-border-soft px-4 py-10 text-center">
-            <div className="mx-auto grid size-10 place-items-center rounded-full border-2 border-border-soft text-fg-muted">
-              <ImageIcon className="size-4" />
-            </div>
-            <p className="mt-3 text-sm font-semibold">Nothing rendered yet</p>
-            <p className="mx-auto mt-1 max-w-[16rem] text-xs leading-relaxed text-fg-muted">
-              Describe a post in the conversation. Every PNG Retroz renders shows
-              up here, newest last.
-            </p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-2 gap-2.5">
-            {results.map((result, i) => (
-              <div
-                key={result.id}
-                className="group relative overflow-hidden rounded-[var(--radius-retro)] border-2 border-border bg-surface-2 shadow-hard-sm"
-              >
-                <button
-                  type="button"
-                  onClick={() => setLightboxIndex(i)}
-                  aria-label={`Open ${result.filename}`}
-                  className="block w-full text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={result.url}
-                    alt={result.filename}
-                    className="aspect-[4/5] w-full object-cover"
-                  />
-                </button>
-                {projectId ? (
-                  <BundleMenu
-                    projectId={projectId}
-                    bundles={bundles}
-                    artifactId={result.id}
-                    sessionTitle={sessionTitle}
-                  />
-                ) : null}
-                <span className="block truncate border-t-2 border-border bg-surface px-2 py-1.5 font-mono text-[10px] text-fg-muted">
-                  {result.filename}
-                </span>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Sits under the grid rather than in the section header: it acts on
-            every render above it, so it reads as the end of that list. */}
-        {projectId && results.length > 0 ? (
+      {/* Plan, caption and renders share one scroll area: any of the three can
+          grow long, and giving each its own box left the panel unable to show
+          all of them at once. */}
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+        <section className="border-b-2 border-border-soft">
           <button
             type="button"
-            onClick={() => setBundleOpen(true)}
-            className="mt-2.5 flex w-full items-center justify-center gap-2 rounded-[var(--radius-retro)] border-2 border-dashed border-border-soft px-3 py-2.5 font-display text-xs font-semibold text-fg-muted outline-none transition-colors hover:border-border hover:bg-surface-2 hover:text-fg focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.99]"
+            onClick={() => setPlanOpen((v) => !v)}
+            aria-expanded={planOpen}
+            className="flex w-full items-center gap-2 px-3.5 py-2.5 text-left outline-none transition-colors hover:bg-surface-2/60 focus-visible:ring-2 focus-visible:ring-ring"
           >
-            <Layers className="size-3.5" />
-            Save as bundle
+            <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-fg-muted/70">
+              Plan
+            </span>
+            <span className="font-mono text-[10px] text-fg-muted">
+              {done}/{plan.length}
+            </span>
+            <span className="flex-1" />
+            <ChevronDown
+              className={cn(
+                "size-3.5 text-fg-muted",
+                `transition-transform ${MOTION} motion-reduce:transition-none`,
+                !planOpen && "-rotate-90",
+              )}
+            />
           </button>
-        ) : null}
+
+          <div
+            className={cn(
+              "grid",
+              `transition-[grid-template-rows] ${MOTION} motion-reduce:transition-none`,
+            )}
+            style={{ gridTemplateRows: planOpen ? "1fr" : "0fr" }}
+          >
+            <div className="overflow-hidden">
+              {plan.length === 0 ? (
+                <p className="px-3.5 pb-3.5 text-xs text-fg-muted">
+                  Nothing planned. Retroz keeps a checklist here for requests
+                  that take more than one step.
+                </p>
+              ) : (
+                <ol className="flex flex-col px-3.5 pb-3.5">
+                  {plan.map((step, i) => (
+                    <PlanRow
+                      key={step.id}
+                      step={step}
+                      index={i + 1}
+                      last={i === plan.length - 1}
+                    />
+                  ))}
+                </ol>
+              )}
+            </div>
+          </div>
+        </section>
+
+        <WorkCaptionPanel
+          caption={caption}
+          hasRenders={results.length > 0}
+          busy={busy}
+          onGenerate={onGenerateCaption}
+        />
+
+        {/* Sticky so the section stays labelled while a long plan or caption
+            scrolls past it. */}
+        <div className="sticky top-0 z-10 flex items-center justify-between gap-2 border-b-2 border-border-soft bg-surface/95 px-3.5 py-2.5 backdrop-blur">
+          <span className="font-mono text-[10px] uppercase tracking-[0.14em] text-fg-muted/70">
+            Renders
+          </span>
+          <span className="font-mono text-[10px] text-fg-muted">
+            {results.length}
+          </span>
+        </div>
+
+        <div className="px-3.5 pb-4 pt-3">
+          {results.length === 0 ? (
+            <div className="rounded-[var(--radius-retro)] border-2 border-dashed border-border-soft px-4 py-10 text-center">
+              <div className="mx-auto grid size-10 place-items-center rounded-full border-2 border-border-soft text-fg-muted">
+                <ImageIcon className="size-4" />
+              </div>
+              <p className="mt-3 text-sm font-semibold">Nothing rendered yet</p>
+              <p className="mx-auto mt-1 max-w-[16rem] text-xs leading-relaxed text-fg-muted">
+                Describe a post in the conversation. Every PNG Retroz renders
+                shows up here, newest last.
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-2.5">
+              {results.map((result, i) => (
+                <div
+                  key={result.id}
+                  className="group relative overflow-hidden rounded-[var(--radius-retro)] border-2 border-border bg-surface-2 shadow-hard-sm"
+                >
+                  <button
+                    type="button"
+                    onClick={() => setLightboxIndex(i)}
+                    aria-label={`Open ${result.filename}`}
+                    className="block w-full text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={result.url}
+                      alt={result.filename}
+                      className="aspect-[4/5] w-full object-cover"
+                    />
+                  </button>
+                  {projectId ? (
+                    <BundleMenu
+                      projectId={projectId}
+                      bundles={bundles}
+                      artifactId={result.id}
+                      sessionTitle={sessionTitle}
+                    />
+                  ) : null}
+                  <span className="block truncate border-t-2 border-border bg-surface px-2 py-1.5 font-mono text-[10px] text-fg-muted">
+                    {result.filename}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Sits under the grid rather than in the section header: it acts on
+              every render above it, so it reads as the end of that list. */}
+          {projectId && results.length > 0 ? (
+            <button
+              type="button"
+              onClick={() => setBundleOpen(true)}
+              className="mt-2.5 flex w-full items-center justify-center gap-2 rounded-[var(--radius-retro)] border-2 border-dashed border-border-soft px-3 py-2.5 font-display text-xs font-semibold text-fg-muted outline-none transition-colors hover:border-border hover:bg-surface-2 hover:text-fg focus-visible:ring-2 focus-visible:ring-ring active:scale-[0.99]"
+            >
+              <Layers className="size-3.5" />
+              Save as bundle
+            </button>
+          ) : null}
+        </div>
       </div>
 
       {projectId ? (
@@ -351,8 +358,10 @@ function PlanRow({
         <span
           className={cn(
             "grid size-5 shrink-0 place-items-center rounded-full border-2 font-mono text-[9px] font-bold",
-            step.status === "done" && "border-border bg-primary text-primary-fg",
-            step.status === "running" && "border-border bg-accent text-accent-fg",
+            step.status === "done" &&
+              "border-border bg-primary text-primary-fg",
+            step.status === "running" &&
+              "border-border bg-accent text-accent-fg",
             step.status === "pending" && "border-border-soft text-fg-muted/70",
             step.status === "blocked" && "border-danger text-danger",
           )}
